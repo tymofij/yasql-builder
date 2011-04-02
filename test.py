@@ -17,3 +17,6 @@ query.FetchFrom(db)
 
 query.Select(db.Users.a, db.Users.b).From(db.Users).Where(db.Users.id == 4)
 query.FetchFrom(db)
+
+query.Select(db.Users.a, db.Users.b).From(db.Users).Where(db.Users.id == 4).And(db.Users.name == 'Joe')
+query.FetchFrom(db)

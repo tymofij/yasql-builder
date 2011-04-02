@@ -1,9 +1,9 @@
-class Db:
+class Db(object):
     def __getattr__(self, name):
         return Table(name)
 
 
-class Cond:
+class Cond(object):
     def __init__(self, first, operator, second):
         self.first = first
         self.operator = operator
@@ -14,27 +14,28 @@ class Cond:
             (str(self.first), str(self.operator), str(self.second))
 
 
-class Table:
+class Table(object):
     def __init__(self, name):
-        self.name = name
+        # to avoid confusion with pretty common field 'name'
+        self.__name = name
 
     def __repr__(self):
-        return "<Table> %s" % self.name
+        return "<Table> %s" % self.__name
 
     def __str__(self):
-        return self.name
+        return self.__name
 
     def __getattr__(self, name):
         return Field(self, name)
 
 
-class Field:
+class Field(object):
     def __init__(self, table, name):
         self.table = table
         self.name = name
 
     def __str__(self):
-        return "%s.%s" % (self.table.name, self.name)
+        return "%s.%s" % (str(self.table), self.name)
 
     def __repr__(self):
         return "<Field> %s" % str(self)
@@ -42,11 +43,11 @@ class Field:
     def __eq__(self, other):
         return Cond(self, "=", other)
 
-    def __ne__(self, arg):
+    def __ne__(self, other):
         return Cond(self, "!=", other)
 
 
-class SqlBuilder:
+class SqlBuilder(object):
     """the query builder"""
     select_fields, from_tables, where_conds = None, None, None
 
@@ -59,7 +60,11 @@ class SqlBuilder:
         return self
 
     def Where(self, *args):
-        self.where_conds = args
+        self.where_conds = list(args)
+        return self
+
+    def And(self, *args):
+        self.where_conds.extend(args)
         return self
 
     def FetchFrom(self, db):
