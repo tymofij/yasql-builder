@@ -27,3 +27,7 @@ print str(sql.Cond(db.a.b == 1, db.b.c != 1))
 
 print str(sql.Cond(db.a.b == 1, db.b.c != 1) & sql.Cond(db.x.y == 'xx'))
 print str(sql.Cond(db.a.b == 1, db.b.c != 1) | sql.Cond(db.x.y == 'xx'))
+print str(sql.Cond(db.a.b == 1, db.b.c != 1) | sql.Cond(db.x.y == 'xx', db.d.y == 'ee'))
+print str(sql.Cond(db.a.b == 1, db.b.c != 1) & sql.Cond(db.x.y == 'xx', db.d.y == 'ee'))
+
+print str(sql.Cond(db.a.b == 1, db.b.c != 1) & ~sql.Cond(db.x.y == 'xx'))

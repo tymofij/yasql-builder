@@ -2,8 +2,8 @@ class Db(object):
     def __getattr__(self, name):
         return Table(name)
 
-AND = "AND"
-OR = "OR"
+AND = " AND "
+OR = " OR "
 
 class Cond(object):
     negative = False
@@ -46,8 +46,9 @@ class Cond(object):
         if len(self.children) < 2:
             self.operator = operator
         if self.operator == operator:
-            if isinstance(other, Cond) and (other.operator == operator or
-                    len(other.children) == 1):
+            # TODO: could be nicer
+            if isinstance(other, Cond) and not self.negative and \
+                (other.operator == operator or len(other.children) == 1):
                 self.children.extend(other.children)
                 return self
             else:
@@ -69,6 +70,10 @@ class Cond(object):
     def __and__(self, other):
         return self.add(other, AND)
 
+    def __invert__(self):
+        self.negative = not self.negative
+        return self
+
     def __repr__(self):
         if self.children:
             return ("<Cond:%s>" % self.operator).strip()
@@ -77,11 +82,14 @@ class Cond(object):
 
     def __str__(self):
         if self.children:
-            return "(%s)" % \
-                 (" "+self.operator+" ").join([str(c) for c in self.children])
+            return "%(not)s(%(expr)s)" % {
+                'not': 'NOT' if self.negative else '',
+                'expr':self.operator.join([str(c) for c in self.children])
+                }
         else:
-            return "%s %s %s" % \
+            expr = "%s %s %s" % \
                 (str(self.first), str(self.operator), str(self.second))
+            return 'NOT(%s)' % expr if self.negative else expr
 
 
 class Table(object):
