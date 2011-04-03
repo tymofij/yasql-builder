@@ -11,6 +11,7 @@ class Expr(object):
     negative = False
     children = [] # sub-expressions or literals
     operator = AND # what connects them
+    parent = None
 
     def __new__(cls, *args):
         """
@@ -26,6 +27,7 @@ class Expr(object):
                         assert isinstance(c, Expr)
                     obj = object.__new__(cls)
                     obj.children = list(args)
+                    obj.adopt()
                     return obj
                 else: # just one Expr object
                     return args[0]
@@ -37,6 +39,15 @@ class Expr(object):
         if not isinstance(first, Expr): # that is handled in __new__
             self.operator = first
             self.children = list(args)
+            self.adopt()
+
+    def adopt(self):
+        """ assigns self as a parent to all current children.
+        mostly needed on create operations: __new__ and join
+        """
+        for child in self.children:
+            if isinstance(child, Param):
+                child.parent = self
 
     def join(self, other, operator):
         """
@@ -58,13 +69,16 @@ class Expr(object):
                 # if multicond, we merge his kids with ours
                 if other.is_multi():
                     self.children.extend(other.children)
-                # if a leaf, we add it to list our our children
+                    self.adopt()
+                # if a leaf, we add it to list of our children
                 else:
+                    other.parent = self
                     self.children.append(other)
                 return self
         else:
-            # shallowcopy ourselves into a new object
+            # shallowcopy ourselves into a new object, to be moved downside
             obj = copy.copy(self)
+            obj.parent = self
             # that is brand new me, with new operator and kids
             self.operator = operator
             self.children = [obj, other]
@@ -85,10 +99,11 @@ class Expr(object):
         return self
 
     def __repr__(self):
-        if isinstance(self.children[0], Expr): # nested condition
-            return ("<Expr:%s>" % self.operator).strip()
+        if self.is_multi(): # nested condition
+            return ("<Expr: %s>" % self.operator).strip()
         else:
-            return "<Expr> %s" % str(self)
+            return "<Expr: %s>" % (" %s " % self.operator).join([
+                repr(child) for child in self.children])
 
     def __str__(self):
         return "%(not)s(%(expr)s)" % {
@@ -97,13 +112,39 @@ class Expr(object):
                         [str(c) for c in self.children])
             }
 
+class Param(object):
+    """ A parameter that can be passed to Expr and thus to SqlBuilder
+    Looks for 'parameters' property dict in its parent object, then its parent
+    and so on. Raises exception when parent with given parameter not found.
+    """
+    name = ''
+    parent = None
+
+    def __init__(self, name, parent=None):
+        self.name = name
+        self.parent = parent
+
+    def __str__(self):
+        parent = self.parent
+        while (not hasattr(parent, 'parameters')
+                                    or self.name not in parent.parameters):
+            if parent is None or not hasattr(parent, 'parent'):
+                raise Exception('parent with "%s" in parameters not found' %
+                    self.name)
+            parent = parent.parent
+        return parent.parameters[self.name]
+
+    def __repr__(self):
+        return "<Param: %s>" % str(self)
+
+
 class Table(object):
     def __init__(self, name):
         # to avoid confusion with pretty common field 'name'
         self.__name = name
 
     def __repr__(self):
-        return "<Table> %s" % self.__name
+        return "<Table: %s>" % self.__name
 
     def __str__(self):
         return self.__name
@@ -121,7 +162,7 @@ class Field(object):
         return "%s.%s" % (str(self.table), self.name)
 
     def __repr__(self):
-        return "<Field> %s" % str(self)
+        return "<Field %s>" % str(self)
 
     def __eq__(self, other):
         return Expr("=", self, other)

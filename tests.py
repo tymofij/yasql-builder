@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
 import sql
-from sql import Expr as E
-
+from sql import Expr as E, Param as P
 db = sql.Db()
+
+e = E(db.a.b == 1, db.b.c != P("x"))
+e.parameters = {'x': 'XXX'}
 
 #print repr(db.xx)
 #print repr(db.Users)
@@ -20,9 +22,9 @@ def test_exprs():
     assert str(E(E('=', db.z.i, 1))) == "(z.i = 1)"
     # representation of simple ones
     assert repr(E(db.a.b == 1, db.b.c != 1).children) == \
-        "[<Expr> (a.b = 1), <Expr> (b.c != 1)]"
+        "[<Expr: <Field a.b> = 1>, <Expr: <Field b.c> != 1>]"
     # a group is represented by its operator
-    assert repr(E(db.a.b == 1, db.b.c != 1)) == "<Expr:AND>"
+    assert repr(E(db.a.b == 1, db.b.c != 1)) == "<Expr: AND>"
     # simple stringification
     assert str(E(db.a.b == 1, db.b.c != 1)) == "((a.b = 1) AND (b.c != 1))"
     # merging in a leaf
