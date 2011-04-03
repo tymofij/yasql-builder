@@ -1,3 +1,5 @@
+import copy
+
 class Db(object):
     def __getattr__(self, name):
         return Table(name)
@@ -64,20 +66,12 @@ class Expr(object):
                 self.children.append(other)
                 return self
         else:
-            # gotta move things down
-            print "XXX"
-            obj = type(self)()
-            # copy ourselves into new object and add this and other as kids
-            obj.children = self.children
-            obj.operator = self.operator
-            obj.negative = self.negative
-            obj.first = self.first
-            obj.second = self.second
+            # shallowcopy ourselves into a new object
+            obj = copy.copy(self)
             # that is brand new me, with new operator and kids
             self.operator = operator
             self.children = [obj, other]
             return self
-
 
     def __or__(self, other):
         return self.join(other, OR)
@@ -142,7 +136,7 @@ class Field(object):
 
 class SqlBuilder(object):
     """the query builder"""
-    select_fields, from_tables, where_Exprs = None, None, None
+    select_fields, from_tables, where_conds = None, None, None
 
     def Select(self, *args, **kwargs):
         self.select_fields = args
@@ -160,16 +154,19 @@ class SqlBuilder(object):
         self.where_Exprs.extend(args)
         return self
 
-    def FetchFrom(self, db):
-        """Go!"""
+    def sql(self):
+        """Construct sql to be executed"""
         res = "SELECT %(select_fields)s FROM %(from_tables)s" % {
             'from_tables':
                 ", ".join([str(table) for table in self.from_tables]),
             'select_fields':
                 ", ".join([str(field) for field in self.select_fields]) or "*"
         }
-        if self.where_Exprs:
+        if self.where_conds:
             res += " WHERE %s" % \
-                 " AND ".join([str(Expr) for Expr in self.where_Exprs])
+                 " AND ".join([str(cond) for cond in self.where_conds])
 
-        print res
+        return res
+
+    def FetchFrom(self, db):
+        pass
