@@ -9,6 +9,7 @@ class Expr(object):
     negative = False
     children = [] # subExpritions
     operator = AND # what connects them
+    first, second = None, None
 
     def __new__(cls, *args):
         """
@@ -38,37 +39,51 @@ class Expr(object):
                 self.first = first
                 if args:
                     assert len(args) == 2
-                self.operator, self.seExpr = args
+                self.operator, self.second = args
 
-    def add(self, other, operator):
-        if other in self.children and operator == self.connector:
-            return self
-        if len(self.children) < 2:
-            self.operator = operator
-        if self.operator == operator:
-            # TODO: could be nicer
-            if isinstance(other, Expr) and not self.negative and \
-                (other.operator == operator or len(other.children) == 1):
+    def join(self, other, operator):
+        """
+        joins this Expression with other one.
+        if current is leaf object, then it is moved downwards as first child
+        and other one is added as second child
+
+        also that is performed when they are of different type etc.
+        when possible through other is added to children list
+        """
+        assert isinstance(other, Expr)
+        # if current is not leaf and merge seems possible
+        if (self.children and self.operator == operator and not self.negative
+                # either of the same operation type, non negated
+                and (other.operator == operator and not self.negative
+                #  or is a leaf
+                or not other.children)):
+            if other.children:
                 self.children.extend(other.children)
                 return self
             else:
                 self.children.append(other)
                 return self
         else:
+            # gotta move things down
+            print "XXX"
             obj = type(self)()
+            # copy ourselves into new object and add this and other as kids
             obj.children = self.children
             obj.operator = self.operator
             obj.negative = self.negative
-
+            obj.first = self.first
+            obj.second = self.second
+            # that is brand new me, with new operator and kids
             self.operator = operator
             self.children = [obj, other]
             return self
 
+
     def __or__(self, other):
-        return self.add(other, OR)
+        return self.join(other, OR)
 
     def __and__(self, other):
-        return self.add(other, AND)
+        return self.join(other, AND)
 
     def __invert__(self):
         self.negative = not self.negative
@@ -88,7 +103,7 @@ class Expr(object):
                 }
         else:
             expr = "%s %s %s" % \
-                (str(self.first), str(self.operator), str(self.seExpr))
+                (str(self.first), str(self.operator), str(self.second))
             return 'NOT(%s)' % expr if self.negative else expr
 
 
