@@ -27,7 +27,7 @@ class Expr(object):
                         assert isinstance(c, Expr)
                     obj = object.__new__(cls)
                     obj.children = list(args)
-                    obj.adopt()
+                    obj.adopt_all()
                     return obj
                 else: # just one Expr object
                     return args[0]
@@ -39,14 +39,14 @@ class Expr(object):
         if not isinstance(first, Expr): # that is handled in __new__
             self.operator = first
             self.children = list(args)
-            self.adopt()
+            self.adopt_all()
 
-    def adopt(self):
+    def adopt_all(self):
         """ assigns self as a parent to all current children.
         mostly needed on create operations: __new__ and join
         """
         for child in self.children:
-            if isinstance(child, Param):
+            if isinstance(child, (Param, Expr)):
                 child.parent = self
 
     def join(self, other, operator):
@@ -69,7 +69,7 @@ class Expr(object):
                 # if multicond, we merge his kids with ours
                 if other.is_multi():
                     self.children.extend(other.children)
-                    self.adopt()
+                    self.adopt_all()
                 # if a leaf, we add it to list of our children
                 else:
                     other.parent = self
@@ -114,7 +114,7 @@ class Expr(object):
 
 class Param(object):
     """ A parameter that can be passed to Expr and thus to SqlBuilder
-    Looks for 'parameters' property dict in its parent object, then its parent
+    Looks for 'params' property dict in its parent object, then its parent
     and so on. Raises exception when parent with given parameter not found.
     """
     name = ''
@@ -126,16 +126,16 @@ class Param(object):
 
     def __str__(self):
         parent = self.parent
-        while (not hasattr(parent, 'parameters')
-                                    or self.name not in parent.parameters):
+        while (not hasattr(parent, 'params')
+                                    or self.name not in parent.params):
             if parent is None or not hasattr(parent, 'parent'):
-                raise Exception('parent with "%s" in parameters not found' %
+                raise Exception('parent with "%s" in params not found' %
                     self.name)
             parent = parent.parent
-        return parent.parameters[self.name]
+        return str(parent.params[self.name])
 
     def __repr__(self):
-        return "<Param: %s>" % str(self)
+        return "<Param: %s>" % self.name
 
 
 class Table(object):
@@ -184,11 +184,11 @@ class SqlBuilder(object):
         return self
 
     def Where(self, *args):
-        self.where_Exprs = list(args)
+        self.where_conds = list(args)
         return self
 
     def And(self, *args):
-        self.where_Exprs.extend(args)
+        self.where_conds.extend(args)
         return self
 
     def sql(self):
