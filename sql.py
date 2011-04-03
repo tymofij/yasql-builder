@@ -5,40 +5,40 @@ class Db(object):
 AND = " AND "
 OR = " OR "
 
-class Cond(object):
+class Expr(object):
     negative = False
-    children = [] # subconditions
+    children = [] # subExpritions
     operator = AND # what connects them
 
     def __new__(cls, *args):
         """
-        creates new Cond object or returns existing,
-        if called with first parameter of type Cond.
+        creates new Expr object or returns existing,
+        if called with first parameter of type Expr.
         in that case other parameters are ignored
         """
         if args:
-            if isinstance(args[0], Cond): # one or more Conds passed
+            if isinstance(args[0], Expr): # one or more Exprs passed
                 if len(args) > 1:
-                    # several conditions passed, add them as children
+                    # several Expritions passed, add them as children
                     for c in args:
-                        assert isinstance(c, Cond)
+                        assert isinstance(c, Expr)
                     obj = object.__new__(cls)
                     obj.children = list(args)
                     return obj
-                else: # just one Cond object
+                else: # just one Expr object
                     return args[0]
         # default object
         return object.__new__(cls)
 
     def __init__(self, first=None, *args):
-        """ Can be initialized both as Cond(a, "=", b) and Cond(Cond(..), c)"""
-        if not isinstance(first, Cond):
+        """ Can be initialized both as Expr(a, "=", b) and Expr(Expr(..), c)"""
+        if not isinstance(first, Expr):
             if first:
                 assert isinstance(first, Field)
                 self.first = first
                 if args:
                     assert len(args) == 2
-                self.operator, self.second = args
+                self.operator, self.seExpr = args
 
     def add(self, other, operator):
         if other in self.children and operator == self.connector:
@@ -47,7 +47,7 @@ class Cond(object):
             self.operator = operator
         if self.operator == operator:
             # TODO: could be nicer
-            if isinstance(other, Cond) and not self.negative and \
+            if isinstance(other, Expr) and not self.negative and \
                 (other.operator == operator or len(other.children) == 1):
                 self.children.extend(other.children)
                 return self
@@ -76,9 +76,9 @@ class Cond(object):
 
     def __repr__(self):
         if self.children:
-            return ("<Cond:%s>" % self.operator).strip()
+            return ("<Expr:%s>" % self.operator).strip()
         else:
-            return "<Cond> %s" % str(self)
+            return "<Expr> %s" % str(self)
 
     def __str__(self):
         if self.children:
@@ -88,7 +88,7 @@ class Cond(object):
                 }
         else:
             expr = "%s %s %s" % \
-                (str(self.first), str(self.operator), str(self.second))
+                (str(self.first), str(self.operator), str(self.seExpr))
             return 'NOT(%s)' % expr if self.negative else expr
 
 
@@ -119,15 +119,15 @@ class Field(object):
         return "<Field> %s" % str(self)
 
     def __eq__(self, other):
-        return Cond(self, "=", other)
+        return Expr(self, "=", other)
 
     def __ne__(self, other):
-        return Cond(self, "!=", other)
+        return Expr(self, "!=", other)
 
 
 class SqlBuilder(object):
     """the query builder"""
-    select_fields, from_tables, where_conds = None, None, None
+    select_fields, from_tables, where_Exprs = None, None, None
 
     def Select(self, *args, **kwargs):
         self.select_fields = args
@@ -138,11 +138,11 @@ class SqlBuilder(object):
         return self
 
     def Where(self, *args):
-        self.where_conds = list(args)
+        self.where_Exprs = list(args)
         return self
 
     def And(self, *args):
-        self.where_conds.extend(args)
+        self.where_Exprs.extend(args)
         return self
 
     def FetchFrom(self, db):
@@ -153,8 +153,8 @@ class SqlBuilder(object):
             'select_fields':
                 ", ".join([str(field) for field in self.select_fields]) or "*"
         }
-        if self.where_conds:
+        if self.where_Exprs:
             res += " WHERE %s" % \
-                 " AND ".join([str(cond) for cond in self.where_conds])
+                 " AND ".join([str(Expr) for Expr in self.where_Exprs])
 
         print res
