@@ -38,7 +38,12 @@ class Expr(object):
         """ Can be initialized both as Expr("=", a, b) and Expr(Expr(..), c)"""
         if not isinstance(first, Expr): # that is handled in __new__
             self.operator = first
-            self.children = list(args)
+            children = []
+            for child in args:
+                if not isinstance(child, (Expr, Param, Field)):
+                    child = Literal(child)
+                children.append(child)
+            self.children = children
             self.adopt_all()
 
     def adopt_all(self):
@@ -112,10 +117,30 @@ class Expr(object):
                         [str(c) for c in self.children])
             }
 
+class Literal(object):
+    """
+    something passed to the query that needs to be transformed according to
+    database conventions
+    """
+
+    def __init__(self, value):
+        self.value = value
+
+    def __repr__(self):
+        return "<Literal:%s>" % str(self)
+
+    def __str__(self):
+        # FIXME -- actual work must be done here, probably up to the parent
+        if type(self.value) == str:
+            return "'%s'" % self.value
+        else:
+            return str(self.value)
+
+
 class Param(object):
     """ A parameter that can be passed to Expr and thus to SqlBuilder
     Looks for 'params' property dict in its parent object, then its parent
-    and so on. Raises exception when parent with given parameter not found.
+    and so on. Raises exception when parent with given parameter is not found.
     """
     name = ''
     parent = None
@@ -132,10 +157,10 @@ class Param(object):
                 raise Exception('parent with "%s" in params not found' %
                     self.name)
             parent = parent.parent
-        return str(parent.params[self.name])
+        return str(Literal(parent.params[self.name]))
 
     def __repr__(self):
-        return "<Param: %s>" % self.name
+        return "<Param:%s>" % self.name
 
 
 class Table(object):
@@ -144,7 +169,7 @@ class Table(object):
         self.__name = name
 
     def __repr__(self):
-        return "<Table: %s>" % self.__name
+        return "<Table:%s>" % self.__name
 
     def __str__(self):
         return self.__name
@@ -162,7 +187,7 @@ class Field(object):
         return "%s.%s" % (str(self.table), self.name)
 
     def __repr__(self):
-        return "<Field %s>" % str(self)
+        return "<Field:%s>" % str(self)
 
     def __eq__(self, other):
         return Expr("=", self, other)
