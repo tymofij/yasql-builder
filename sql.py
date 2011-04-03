@@ -4,14 +4,13 @@ class Db(object):
     def __getattr__(self, name):
         return Table(name)
 
-AND = " AND "
-OR = " OR "
+AND = "AND"
+OR = "OR"
 
 class Expr(object):
     negative = False
-    children = [] # subExpritions
+    children = [] # sub-expressions or literals
     operator = AND # what connects them
-    first, second = None, None
 
     def __new__(cls, *args):
         """
@@ -22,7 +21,7 @@ class Expr(object):
         if args:
             if isinstance(args[0], Expr): # one or more Exprs passed
                 if len(args) > 1:
-                    # several Expritions passed, add them as children
+                    # several Expressions passed, add them as children
                     for c in args:
                         assert isinstance(c, Expr)
                     obj = object.__new__(cls)
@@ -34,14 +33,10 @@ class Expr(object):
         return object.__new__(cls)
 
     def __init__(self, first=None, *args):
-        """ Can be initialized both as Expr(a, "=", b) and Expr(Expr(..), c)"""
-        if not isinstance(first, Expr):
-            if first:
-                assert isinstance(first, Field)
-                self.first = first
-                if args:
-                    assert len(args) == 2
-                self.operator, self.second = args
+        """ Can be initialized both as Expr("=", a, b) and Expr(Expr(..), c)"""
+        if not isinstance(first, Expr): # that is handled in __new__
+            self.operator = first
+            self.children = list(args)
 
     def join(self, other, operator):
         """
@@ -54,16 +49,18 @@ class Expr(object):
         """
         assert isinstance(other, Expr)
         # if current is not leaf and merge seems possible
-        if (self.children and self.operator == operator and not self.negative
-                # either of the same operation type, non negated
-                and (other.operator == operator and not self.negative
-                #  or is a leaf
-                or not other.children)):
-            if other.children:
-                self.children.extend(other.children)
-                return self
-            else:
-                self.children.append(other)
+        if (self.operator == operator and not self.negative
+                # other is either multicond of the same operation type,
+                # non negated
+                and (other.operator == operator and not other.negative
+                    # or is a leaf:
+                    or not other.is_multi()) ):
+                # if multicond, we merge his kids with ours
+                if other.is_multi():
+                    self.children.extend(other.children)
+                # if a leaf, we add it to list our our children
+                else:
+                    self.children.append(other)
                 return self
         else:
             # shallowcopy ourselves into a new object
@@ -72,6 +69,10 @@ class Expr(object):
             self.operator = operator
             self.children = [obj, other]
             return self
+
+    def is_multi(self):
+        """ returns True when this Expr contains other Exprs """
+        return [c for c in self.children if isinstance(c, Expr)]
 
     def __or__(self, other):
         return self.join(other, OR)
@@ -84,22 +85,17 @@ class Expr(object):
         return self
 
     def __repr__(self):
-        if self.children:
+        if isinstance(self.children[0], Expr): # nested condition
             return ("<Expr:%s>" % self.operator).strip()
         else:
             return "<Expr> %s" % str(self)
 
     def __str__(self):
-        if self.children:
-            return "%(not)s(%(expr)s)" % {
-                'not': 'NOT' if self.negative else '',
-                'expr':self.operator.join([str(c) for c in self.children])
-                }
-        else:
-            expr = "%s %s %s" % \
-                (str(self.first), str(self.operator), str(self.second))
-            return 'NOT(%s)' % expr if self.negative else expr
-
+        return "%(not)s(%(expr)s)" % {
+            'not': 'NOT' if self.negative else '',
+            'expr':(" %s " % self.operator).join(
+                        [str(c) for c in self.children])
+            }
 
 class Table(object):
     def __init__(self, name):
@@ -128,14 +124,14 @@ class Field(object):
         return "<Field> %s" % str(self)
 
     def __eq__(self, other):
-        return Expr(self, "=", other)
+        return Expr("=", self, other)
 
     def __ne__(self, other):
-        return Expr(self, "!=", other)
+        return Expr("!=", self, other)
 
 
 class SqlBuilder(object):
-    """the query builder"""
+    """ the query builder """
     select_fields, from_tables, where_conds = None, None, None
 
     def Select(self, *args, **kwargs):
@@ -155,7 +151,7 @@ class SqlBuilder(object):
         return self
 
     def sql(self):
-        """Construct sql to be executed"""
+        """ Construct sql to be executed """
         res = "SELECT %(select_fields)s FROM %(from_tables)s" % {
             'from_tables':
                 ", ".join([str(table) for table in self.from_tables]),
