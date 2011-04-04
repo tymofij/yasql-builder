@@ -124,5 +124,7 @@ def test_update():
         "  WHERE (g.h = 'HH')"
 
 def test_join():
-    assert sql.SqlBuilder().Select().From(db.Users).LeftJoin(db.Profiles, db.Users.profile_id == db.Profiles.id).sql(db="sqlite") == \
-        "SELECT * FROM Users LEFT OUTER JOIN Profiles ON (Users.profile_id = Profiles.id)"
+    assert sql.SqlBuilder().Select().From(db.Users).LeftJoin(
+        db.Profiles, db.Users.profile_id == db.Profiles.id
+        ).sql(db="sqlite") == "SELECT * FROM Users "\
+            "LEFT OUTER JOIN Profiles ON (Users.profile_id = Profiles.id)"
