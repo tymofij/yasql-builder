@@ -98,7 +98,7 @@ class Expr(object):
 
     def sql(self, **kwargs):
         def sqlize(obj, **kwargs):
-            if hasattr(obj, 'sql'):
+            if hasattr(obj, 'sql') and callable(obj.sql):
                 return obj.sql(**kwargs)
             else:
                 return str(obj)
