@@ -260,7 +260,7 @@ class SqlBuilder(object):
         return self
 
     def From(self, *args, **kwargs):
-        # TODO: tables in a list, to indicate table.*
+        # TODO: tables aliases
         self.from_tables = args
         return self
 
