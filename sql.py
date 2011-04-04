@@ -468,3 +468,16 @@ class RowWrapper(object):
             return self.values[self.short_fields.index(attr)]
         if attr in self.long_fields:
             return self.values[self.long_fields.index(attr)]
+
+    def __repr__(self):
+        return repr(self.values)
+    def __str__(self):
+        return str(self.values)
+    def __unicode__(self):
+        return unicode(self.values)
+    def __iter__(self):
+        return iter(self.values)
+    def __getitem__(self, key):
+        return self.values[key]
+    def __len__(self):
+        return len(self.values)
