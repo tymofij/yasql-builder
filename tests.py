@@ -5,6 +5,11 @@ import datetime
 from sql import Expr as E, Param as P, Literal as L
 db = sql.Db(engine='sqlite', name=':memory:')
 
+print sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
+        ).Where(db.Users.id == 4
+        ).Or(db.Users.name == 'Joe', db.Users.name == 'Sarah').sql(db="sqlite"
+        )
+
 def test_table_field_repr():
     assert repr(db.xx) == "<Table:xx>"
     assert repr(db.Users) == "<Table:Users>"
@@ -14,25 +19,27 @@ def test_exprs():
     # monkeypatch Literal to make it work without db provided
     sql.Literal.default_db = 'sqlite'
     # no new node should be created
-    assert str(E(E('=', db.z.i, 1))) == "(z.i = 1)"
+    assert str(E(E(db.z.i, 1, operator='='))) == "(z.i = 1)"
     # representation of simple ones
     assert repr(E(db.a.b == 1, db.b.c != 1).children) == \
       "[<Expr: <Field:a.b> = <Literal:1>>, <Expr: <Field:b.c> != <Literal:1>>]"
     # a group is represented by its operator
-    assert repr(E(db.a.b == 1, db.b.c != 1)) == "<Expr: AND>"
+    assert repr(E((db.a.b == 1) & (db.b.c != 1))) == "<Expr: AND>"
     # simple stringification
-    assert str(E(db.a.b == 1, db.b.c != 1)) == "((a.b = 1) AND (b.c != 1))"
+    assert str(E((db.a.b == 1) & (db.b.c != 1))) == "((a.b = 1) AND (b.c != 1))"
     # merging in a leaf
-    assert str(E(db.a.b == 1, db.b.c != 1) & E(db.x.y == 'xx')) == \
+    assert str(E((db.a.b == 1) & (db.b.c != 1)) & E(db.x.y == 'xx')) == \
         "((a.b = 1) AND (b.c != 1) AND (x.y = 'xx'))"
     # this leaf should not be merged in
-    assert str(E(db.a.b== 1, db.b.c != 1) | E(db.x.y == 'xx')) == \
+    assert str(E((db.a.b== 1) & (db.b.c != 1)) | E(db.x.y == 'xx')) == \
         "(((a.b = 1) AND (b.c != 1)) OR (x.y = 'xx'))"
     # mergin in a multicond
-    assert str(E(db.a.b==1, db.b.c!=1) & E(db.x.y=='xx', db.d.y=='ee')) == \
+    assert str(E((db.a.b==1) & (db.b.c!=1)) &
+        E((db.x.y=='xx') & (db.d.y=='ee'))) == \
         "((a.b = 1) AND (b.c != 1) AND (x.y = 'xx') AND (d.y = 'ee'))"
     # this multicond should not be merged in
-    assert str(E(db.a.b==1, db.b.c!=1) | E(db.x.y=='xx', db.d.y=='ee')) == \
+    assert str(E((db.a.b==1) & (db.b.c!=1)) |
+        E((db.x.y=='xx') & (db.d.y=='ee'))) == \
         "(((a.b = 1) AND (b.c != 1)) OR ((x.y = 'xx') AND (d.y = 'ee')))"
     # and this one also should not, because there is NOT
     assert str( (db.a.b == 1) & (db.b.c != 1) & ~(db.x.y == 'xx')) == \
@@ -45,13 +52,13 @@ def test_params():
             'db': 'sqlite'
         }
     # no new node should be created
-    assert E(E('=', db.z.i, P('a'))).sql(**opts) == "(z.i = 'AAA')"
+    assert E(E(db.z.i, P('a'), operator='=')).sql(**opts) == "(z.i = 'AAA')"
     assert repr(P('x')) == "<Param:x>"
     # simple stringification
-    assert (E(db.a.b == P('a'), db.b.c != P('b'))).sql(**opts) == \
+    assert (E((db.a.b == P('a')) & (db.b.c != P('b')))).sql(**opts) == \
         "((a.b = 'AAA') AND (b.c != 'BBB'))"
     # merging in a leaf
-    assert (E(db.a.b == P(1), db.b.c != P(2)) & E(db.x.y == P('c'))
+    assert (E((db.a.b == P(1)) & (db.b.c != P(2))) & E(db.x.y == P('c'))
         ).sql(**opts) == "((a.b = 111) AND (b.c != 222) AND (x.y = 'CCC'))"
 
 def test_literals():
@@ -81,15 +88,21 @@ def test_builder():
         ).Where(db.Users.id == 4).sql(db="sqlite") == \
         "SELECT Users.id, Users.login FROM Users WHERE (Users.id = 4)"
     assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
+        ).Where(db.Users.id == 4, db.Users.name == 'Joe').sql(db="sqlite"
+        ) == "SELECT Users.id, Users.login FROM Users " \
+             "WHERE ((Users.id = 4) AND (Users.name = 'Joe'))"
+
+    assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
         ).Where(db.Users.id == 4).And(db.Users.name == 'Joe').sql(db="sqlite"
         ) == "SELECT Users.id, Users.login FROM Users " \
              "WHERE ((Users.id = 4) AND (Users.name = 'Joe'))"
+    # XXX: this one could be nicer
     assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
         ).Where(db.Users.id == 4
         ).Or(db.Users.name == 'Joe', db.Users.name == 'Sarah').sql(db="sqlite"
         ) == "SELECT Users.id, Users.login FROM Users " \
-             "WHERE ((Users.id = 4) OR (Users.name = 'Joe') " \
-             "OR (Users.name = 'Sarah'))"
+             "WHERE ((Users.id = 4) OR ((Users.name = 'Joe') " \
+             "OR (Users.name = 'Sarah')))"
     assert sql.SqlBuilder().Delete().From(db.Users).sql(db="sqlite") == \
         "DELETE FROM Users"
     assert sql.SqlBuilder().Delete().From(db.Users

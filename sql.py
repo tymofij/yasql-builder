@@ -1,6 +1,7 @@
 import copy
 import datetime
 from types import NoneType
+import operator
 
 class Db(object):
     __settings = {
@@ -21,38 +22,32 @@ OR = "OR"
 class Expr(object):
     negative = False
     children = [] # sub-expressions or literals
-    operator = AND # what connects them
+    operator = None # what connects them
 
-    def __new__(cls, *args):
+    def __new__(cls, *args, **kwargs):
         """
         creates new Expr object or returns existing,
-        if called with first parameter of type Expr.
-        in that case other parameters are ignored
+        if called with single parameter of type Expr.
         """
-        if args:
-            if isinstance(args[0], Expr): # one or more Exprs passed
-                if len(args) > 1:
-                    # several Expressions passed, add them as children
-                    for c in args:
-                        assert isinstance(c, Expr)
-                    obj = object.__new__(cls)
-                    obj.children = list(args)
-                    return obj
-                else: # just one Expr object
-                    return args[0]
+        if len(args) == 1 and isinstance(args[0], Expr):
+            return args[0]
         # default object
         return object.__new__(cls)
 
-    def __init__(self, first=None, *args):
-        """ Can be initialized both as Expr("=", a, b) and Expr(Expr(..), c)"""
-        if not isinstance(first, Expr): # that is handled in __new__
-            self.operator = first
+    def __init__(self, *args, **kwargs):
+        """ Initializes the Expression, accepting parameters as its children
+        simple types are treated as Literals for future sql representation
+        """
+        # except the case where just one expression was passed.
+        # this situation is handled in __new__
+        if args and (len(args) != 1 or not isinstance(args[0], Expr)):
             children = []
             for child in args:
                 if not isinstance(child, (Expr, Param, Field)):
                     child = Literal(child)
                 children.append(child)
             self.children = children
+            self.operator = kwargs.get('operator')
 
     def join(self, other, operator):
         """
@@ -113,12 +108,18 @@ class Expr(object):
                 return obj.sql(**kwargs)
             else:
                 return str(obj)
-
-        return "%(not)s(%(expr)s)" % {
-            'not': 'NOT' if self.negative else '',
-            'expr':(" %s " % self.operator).join(
-                        [sqlize(c, **kwargs) for c in self.children])
-            }
+        if self.operator is None:
+            assert len(self.children) == 1, "No operator for multichild Expr"
+            res = sqlize(self.children[0], **kwargs)
+            if self.negative:
+                res = "NOT(%s)" % res
+            return res
+        else:
+            return "%(not)s(%(expr)s)" % {
+                'not': 'NOT' if self.negative else '',
+                'expr':(" %s " % self.operator).join(
+                            [sqlize(c, **kwargs) for c in self.children])
+                }
 
     __str__ = sql
 
@@ -243,10 +244,10 @@ class Field(object):
         return "<Field:%s>" % str(self)
 
     def __eq__(self, other):
-        return Expr("=", self, other)
+        return Expr(self, other, operator='=')
 
     def __ne__(self, other):
-        return Expr("!=", self, other)
+        return Expr(self, other, operator='!=')
 
 
 class SqlBuilder(object):
@@ -284,20 +285,19 @@ class SqlBuilder(object):
         return self
 
     def Where(self, *args):
-        self.where_conds = Expr(*args)
+        self.where_conds = reduce(operator.and_, args)
         return self
 
     def And(self, *args):
         assert self.where_conds or self.having_conds, \
             ".And() can be called only after .Where() or .Having()"
-        self.where_conds = self.where_conds & Expr(*args)
+        self.where_conds &= reduce(operator.and_, args)
         return self
 
     def Or(self, *args):
         assert self.where_conds or self.having_conds, \
             ".Or() can be called only after .Where() or .Having()"
-        for arg in args:
-            self.where_conds = self.where_conds | Expr(arg)
+        self.where_conds |= reduce(operator.or_, args)
         return self
 
     def GroupBy(self, *args):
