@@ -16,11 +16,11 @@ class Db(object):
     def __getattr__(self, name):
         return Table(name)
 
-AND = "AND"
-OR = "OR"
 UPDATE = 'UPDATE'
 SELECT = 'SELECT'
 DELETE = 'DELETE'
+
+BINARY_OPERATORS = ('=', '!=', '<', '<=', '>', '>=', 'IN')
 
 class Expr(object):
     negative = False
@@ -61,14 +61,16 @@ class Expr(object):
         also that is performed when they are of different type etc.
         when possible through other is added to children list
         """
-        assert isinstance(other, Expr)
+        if not isinstance(other, Expr):
+            other = Expr(other)
         # if current is not leaf and merge seems possible
         if (self.operator == operator and not self.negative
                 # other is either multicond of the same operation type,
                 # non negated
                 and (other.operator == operator and not other.negative
                     # or is a leaf:
-                    or not other.is_multi()) ):
+                    or not other.is_multi())
+                ):
                 # if multicond, we merge his kids with ours
                 if other.is_multi():
                     self.children.extend(other.children)
@@ -89,14 +91,32 @@ class Expr(object):
         return [c for c in self.children if isinstance(c, Expr)]
 
     def __or__(self, other):
-        return self.join(other, OR)
-
+        return self.join(other, "OR")
     def __and__(self, other):
-        return self.join(other, AND)
-
+        return self.join(other, "AND")
     def __invert__(self):
         self.negative = not self.negative
         return self
+    def __eq__(self, other):
+        return self.join(other, '=')
+    def __ne__(self, other):
+        return self.join(other, '!=')
+    def __lt__(self, other):
+        return self.join(other, '<')
+    def __le__(self, other):
+        return self.join(other, '<=')
+    def __gt__(self, other):
+        return self.join(other, '>')
+    def __ge__(self, other):
+        return self.join(other, '>=')
+    def __add__(self, other):
+        return self.join(other, '+')
+    def __sub__(self, other):
+        return self.join(other, '-')
+    def __mul__(self, other):
+        return self.join(other, '*')
+    def __div__(self, other):
+        return self.join(other, '/')
 
     def __repr__(self):
         if self.is_multi(): # nested condition
@@ -126,7 +146,31 @@ class Expr(object):
 
     __str__ = sql
 
-class Literal(object):
+
+class Overloaded(object):
+    def __eq__(self, other):
+        return Expr(self, other, operator='=')
+    def __ne__(self, other):
+        return Expr(self, other, operator='!=')
+    def __lt__(self, other):
+        return Expr(self, other, operator='<')
+    def __le__(self, other):
+        return Expr(self, other, operator='<=')
+    def __gt__(self, other):
+        return Expr(self, other, operator='>')
+    def __ge__(self, other):
+        return Expr(self, other, operator='>=')
+    def __add__(self, other):
+        return Expr(self, other, operator='+')
+    def __sub__(self, other):
+        return Expr(self, other, operator='-')
+    def __mul__(self, other):
+        return Expr(self, other, operator='*')
+    def __div__(self, other):
+        return Expr(self, other, operator='/')
+
+
+class Literal(Overloaded):
     """
     something passed to the query that needs to be transformed according to
     database conventions
@@ -203,7 +247,7 @@ class Literal(object):
             except TypeError:
                 raise Exception("No converter for %s" % type(self.value))
 
-class Param(object):
+class Param(Overloaded):
     """ A parameter that can be passed to Expr and thus to SqlBuilder
     """
     name = ''
@@ -235,7 +279,7 @@ class Table(object):
         return Field(self, name)
 
 
-class Field(object):
+class Field(Overloaded):
     def __init__(self, table, name):
         self.table = table
         self.name = name
@@ -245,28 +289,6 @@ class Field(object):
 
     def __repr__(self):
         return "<Field:%s>" % str(self)
-
-    def __eq__(self, other):
-        return Expr(self, other, operator='=')
-    def __ne__(self, other):
-        return Expr(self, other, operator='!=')
-    def __lt__(self, other):
-        return Expr(self, other, operator='<')
-    def __le__(self, other):
-        return Expr(self, other, operator='<=')
-    def __gt__(self, other):
-        return Expr(self, other, operator='>')
-    def __ge__(self, other):
-        return Expr(self, other, operator='>=')
-
-    def __add__(self, other):
-        return Expr(self, other, operator='+')
-    def __sub__(self, other):
-        return Expr(self, other, operator='-')
-    def __mul__(self, other):
-        return Expr(self, other, operator='*')
-    def __div__(self, other):
-        return Expr(self, other, operator='/')
 
 
 class SqlBuilder(object):

@@ -6,7 +6,7 @@ from sql import Expr as E, Param as P, Literal as L
 db = sql.Db(engine='sqlite', name=':memory:')
 
 sql.Literal.default_db = 'sqlite'
-print sql.SqlBuilder().Update(db.x).Set(a=2, b='x').sql(db="sqlite")
+print str((db.a.b + 1) > 4)
 
 def test_table_field_repr():
     assert repr(db.xx) == "<Table:xx>"
