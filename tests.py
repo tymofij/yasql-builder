@@ -3,6 +3,8 @@
 import sql
 from sql import Expr as E, Param as P
 db = sql.Db()
+# monkeypatch Literal to make it work without db provided
+sql.Literal.default_db = 'sqlite'
 
 #print repr(db.xx)
 #print repr(db.Users)

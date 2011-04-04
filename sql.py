@@ -1,4 +1,5 @@
-import copy
+import copy, datetime
+from types import NoneType
 
 class Db(object):
     def __getattr__(self, name):
@@ -116,6 +117,8 @@ class Literal(object):
     something passed to the query that needs to be transformed according to
     database conventions
     """
+    # good for testing, but in general case should be unnecessary
+    default_db = None
 
     def __init__(self, value):
         self.value = value
@@ -123,13 +126,65 @@ class Literal(object):
     def __repr__(self):
         return "<Literal:%s>" % self.sql()
 
-    def sql(self, **kwargs):
-        # FIXME -- actual work must be done here, according to db type
-        if type(self.value) == str:
-            return "'%s'" % self.value
+    def bool_converter(value, db):
+        if db in ('postgres', 'rdbhost'):
+            return "'t'" if value else "'f'"
         else:
-            return str(self.value)
+            return '1' if value else '0'
 
+    def string_converter(value, db):
+        replaces = [
+            ("'", "''"),
+            ('\\', '\\\\'),
+            ('\000', '\\0'),
+            ('\b', '\\b'),
+            ('\n', '\\n'),
+            ('\r', '\\r'),
+            ('\t', '\\t'),
+        ]
+        if db in ('mysql', 'postgres', 'rdbhost'):
+            for orig, repl in replaces:
+                value = value.replace(orig, repl)
+        elif db in ('sqlite', 'firebird', 'sybase', 'maxdb', 'mssql'):
+            value = value.replace("'", "''")
+        else:
+            raise Exception("Database %s unknown" % db)
+        return "'%s'" % value
+
+    def sequence_converter(value, db):
+        return "(%s)" % ", ".join([Literal(v).sql(db) for v in value])
+
+    converters = {
+        int: lambda value, db: str(value),
+        long: lambda value, db: str(value),
+        float: lambda value, db: str(value),
+        bool: bool_converter,
+        str: string_converter,
+        unicode: string_converter,
+        datetime.date:
+            lambda value, db: "'%04d-%02d-%02d'" % \
+                (value.year, value.month, value.day),
+        datetime.datetime:
+            lambda value, db: "'%02d:%02d:%02d'" % \
+                (value.hour, value.minute, value.second),
+        datetime.timedelta:
+            lambda value, db: "INTERVAL '%d days %d seconds'" % \
+                (value.days, value.seconds),
+        NoneType: lambda value, db: "NULL",
+    }
+
+    def sql(self, **kwargs):
+        db = kwargs.get('db', self.default_db)
+        if not db:
+            raise Exception("Undefined db")
+        if type(self.value) in self.converters:
+            return self.converters[type(self.value)](self.value, db)
+        else:
+            try:
+                iter(self.value)
+                return sequence_converter(self.value, db)
+            except TypeError:
+                raise Exception("No converter for %s" % type(self.value))
 
 class Param(object):
     """ A parameter that can be passed to Expr and thus to SqlBuilder
