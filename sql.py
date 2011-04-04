@@ -13,13 +13,13 @@ class Db(object):
         if self._settings['engine'] == 'sqlite':
             self.__connection = sqlite3.connect(self._settings['name'])
         else:
-            raise Exception("Not Implemented")
+            raise Exception("DB Backend not Implemented")
 
     def _execute(self, query):
         if self._settings['engine']:
             return self.__connection.execute(query)
         else:
-            raise Exception("Not Implemented")
+            raise Exception("DB Backend not Implemented")
 
     def __getattr__(self, name):
         return Table(name)
@@ -45,7 +45,7 @@ class Expr(object):
             return args[0]
         # default object
         obj = object.__new__(cls)
-        obj.func = ''
+        obj.func = '' # there can be a function to be applied to the result
         obj.children = [] # sub-expressions or literals
         obj.operator = None # what connects them
         return obj
