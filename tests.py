@@ -42,7 +42,7 @@ def test_exprs():
 
 def test_params():
     opts = {'params':
-            {'a': 'AAA', 'b': 'BBB', 'c': 'CCC', 1:111, 2: 222, 'x': 'XXX' }
+            {'a': 'AAA', 'b': 'BBB', 'c': 'CCC', 1:111, 2: 222 }
         }
     # no new node should be created
     assert E(E('=', db.z.i, P('a'))).sql(**opts) == "(z.i = 'AAA')"
@@ -51,5 +51,5 @@ def test_params():
     assert (E(db.a.b == P('a'), db.b.c != P('b'))).sql(**opts) == \
         "((a.b = 'AAA') AND (b.c != 'BBB'))"
     # merging in a leaf
-    assert (E(db.a.b == P(1), db.b.c != P(2)) & E(db.x.y == P('x'))
-        ).sql(**opts) == "((a.b = 111) AND (b.c != 222) AND (x.y = 'XXX'))"
+    assert (E(db.a.b == P(1), db.b.c != P(2)) & E(db.x.y == P('c'))
+        ).sql(**opts) == "((a.b = 111) AND (b.c != 222) AND (x.y = 'CCC'))"
