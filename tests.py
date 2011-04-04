@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
 import sql
-from sql import Expr as E, Param as P
+import datetime
+from sql import Expr as E, Param as P, Literal as L
 db = sql.Db()
-# monkeypatch Literal to make it work without db provided
-sql.Literal.default_db = 'sqlite'
+
 
 #print repr(db.xx)
 #print repr(db.Users)
@@ -17,6 +17,8 @@ sql.Literal.default_db = 'sqlite'
 #print query.Select(db.Users.a, db.Users.b).From(db.Users).Where(db.Users.id == 4).And(db.Users.name == 'Joe').sql()
 
 def test_exprs():
+    # monkeypatch Literal to make it work without db provided
+    sql.Literal.default_db = 'sqlite'
     # no new node should be created
     assert str(E(E('=', db.z.i, 1))) == "(z.i = 1)"
     # representation of simple ones
@@ -41,10 +43,12 @@ def test_exprs():
     # and this one also should not, because there is NOT
     assert str( (db.a.b == 1) & (db.b.c != 1) & ~(db.x.y == 'xx')) == \
         "((a.b = 1) AND (b.c != 1) AND NOT(x.y = 'xx'))"
+    # return it to initial None
+    sql.Literal.default_db = None
 
 def test_params():
-    opts = {'params':
-            {'a': 'AAA', 'b': 'BBB', 'c': 'CCC', 1:111, 2: 222 }
+    opts = {'params': {'a': 'AAA', 'b': 'BBB', 'c': 'CCC', 1:111, 2: 222 },
+            'db': 'sqlite'
         }
     # no new node should be created
     assert E(E('=', db.z.i, P('a'))).sql(**opts) == "(z.i = 'AAA')"
@@ -55,3 +59,21 @@ def test_params():
     # merging in a leaf
     assert (E(db.a.b == P(1), db.b.c != P(2)) & E(db.x.y == P('c'))
         ).sql(**opts) == "((a.b = 111) AND (b.c != 222) AND (x.y = 'CCC'))"
+
+def test_literals():
+    assert L(-1).sql(db='sqlite') == '-1'
+    assert L('X').sql(db='sqlite') == "'X'"
+    assert L("'X").sql(db='sqlite') == "'''X'"
+    assert L(r"'\\X").sql(db='mysql') == r"'''\\\\X'"
+    assert L((1,2,3)).sql(db='sqlite') == "(1, 2, 3)"
+    assert L((1,2,'x')).sql(db='sqlite') == "(1, 2, 'x')"
+    assert L(datetime.date(year=2000, month=12, day=31)).sql(db='sqlite') == \
+        "'2000-12-31'"
+    assert L(datetime.time(hour=2, minute=12, second=6)).sql(db='sqlite') == \
+        "'02:12:06'"
+    assert L(datetime.datetime(
+        year=1999, month=2, day=8, hour=2, minute=12, second=6)
+        ).sql(db='sqlite') == "'1999-02-08 02:12:06'"
+    assert L(None).sql(db='sqlite') == 'NULL'
+    assert L(True).sql(db='mysql') == '1'
+    assert L(True).sql(db='postgres') == "'t'"

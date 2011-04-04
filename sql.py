@@ -1,4 +1,5 @@
-import copy, datetime
+import copy
+import datetime
 from types import NoneType
 
 class Db(object):
@@ -151,9 +152,6 @@ class Literal(object):
             raise Exception("Database %s unknown" % db)
         return "'%s'" % value
 
-    def sequence_converter(value, db):
-        return "(%s)" % ", ".join([Literal(v).sql(db) for v in value])
-
     converters = {
         int: lambda value, db: str(value),
         long: lambda value, db: str(value),
@@ -162,14 +160,18 @@ class Literal(object):
         str: string_converter,
         unicode: string_converter,
         datetime.date:
-            lambda value, db: "'%04d-%02d-%02d'" % \
-                (value.year, value.month, value.day),
+            lambda value, db: "'%04d-%02d-%02d'" % (
+                value.year, value.month, value.day),
+        datetime.time:
+            lambda value, db: "'%02d:%02d:%02d'" % (
+                value.hour, value.minute, value.second),
         datetime.datetime:
-            lambda value, db: "'%02d:%02d:%02d'" % \
-                (value.hour, value.minute, value.second),
+            lambda value, db: "'%04d-%02d-%02d %02d:%02d:%02d'" % (
+                value.year, value.month, value.day,
+                value.hour, value.minute, value.second),
         datetime.timedelta:
-            lambda value, db: "INTERVAL '%d days %d seconds'" % \
-                (value.days, value.seconds),
+            lambda value, db: "INTERVAL '%d days %d seconds'" % (
+                value.days, value.seconds),
         NoneType: lambda value, db: "NULL",
     }
 
@@ -181,8 +183,10 @@ class Literal(object):
             return self.converters[type(self.value)](self.value, db)
         else:
             try:
+                # may be it is iterable?
                 iter(self.value)
-                return sequence_converter(self.value, db)
+                return "(%s)" % ", ".join(
+                    [Literal(v).sql(db=db) for v in self.value])
             except TypeError:
                 raise Exception("No converter for %s" % type(self.value))
 
