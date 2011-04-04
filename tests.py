@@ -27,17 +27,17 @@ def test_exprs():
     assert repr(E(1)) == "<Expr: <Literal:1>>"
     assert repr(E('x')) == "<Expr: <Literal:'x'>>"
     # simple stringification
-    assert str(E((db.a.b == 1) & (db.b.c != 1))) == "((a.b = 1) AND (b.c != 1))"
+    assert str(E((db.a.b > 1) & (db.b.c != 1))) == "((a.b > 1) AND (b.c != 1))"
     # merging in a leaf
-    assert str(E((db.a.b == 1) & (db.b.c != 1)) & E(db.x.y == 'xx')) == \
-        "((a.b = 1) AND (b.c != 1) AND (x.y = 'xx'))"
+    assert str(E((db.a.b >= 1) & (db.b.c != 1)) & E(db.x.y == 'xx')) == \
+        "((a.b >= 1) AND (b.c != 1) AND (x.y = 'xx'))"
     # this leaf should not be merged in
-    assert str(E((db.a.b== 1) & (db.b.c != 1)) | E(db.x.y == 'xx')) == \
-        "(((a.b = 1) AND (b.c != 1)) OR (x.y = 'xx'))"
+    assert str(E((db.a.b < 1) & (db.b.c != 1)) | E(db.x.y == 'xx')) == \
+        "(((a.b < 1) AND (b.c != 1)) OR (x.y = 'xx'))"
     # mergin in a multicond
-    assert str(E((db.a.b==1) & (db.b.c!=1)) &
+    assert str(E((db.a.b <= 1) & (db.b.c!=1)) &
         E((db.x.y=='xx') & (db.d.y=='ee'))) == \
-        "((a.b = 1) AND (b.c != 1) AND (x.y = 'xx') AND (d.y = 'ee'))"
+        "((a.b <= 1) AND (b.c != 1) AND (x.y = 'xx') AND (d.y = 'ee'))"
     # this multicond should not be merged in
     assert str(E((db.a.b==1) & (db.b.c!=1)) |
         E((db.x.y=='xx') & (db.d.y=='ee'))) == \

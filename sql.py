@@ -248,9 +248,25 @@ class Field(object):
 
     def __eq__(self, other):
         return Expr(self, other, operator='=')
-
     def __ne__(self, other):
         return Expr(self, other, operator='!=')
+    def __lt__(self, other):
+        return Expr(self, other, operator='<')
+    def __le__(self, other):
+        return Expr(self, other, operator='<=')
+    def __gt__(self, other):
+        return Expr(self, other, operator='>')
+    def __ge__(self, other):
+        return Expr(self, other, operator='>=')
+
+    def __add__(self, other):
+        return Expr(self, other, operator='+')
+    def __sub__(self, other):
+        return Expr(self, other, operator='-')
+    def __mul__(self, other):
+        return Expr(self, other, operator='*')
+    def __div__(self, other):
+        return Expr(self, other, operator='/')
 
 
 class SqlBuilder(object):
@@ -258,6 +274,7 @@ class SqlBuilder(object):
     query_type = None
     select_fields, from_tables = None, None
     where_conds, having_conds = None, None
+    joins = []
     limit = None
     params = []
 
@@ -312,7 +329,7 @@ class SqlBuilder(object):
         self.where_conds |= reduce(operator.or_, args)
         return self
 
-    def Join(self, *args, **kwargs):
+    def Join(self, table, conditions=None, type="inner", *args, **kwargs):
         # TODO
         return self
 
