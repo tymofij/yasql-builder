@@ -81,7 +81,7 @@ def test_literals():
     assert L(True).sql(db='mysql') == '1'
     assert L(True).sql(db='postgres') == "'t'"
 
-def test_builder():
+def test_select():
     assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
         ).sql(db="sqlite") == "SELECT Users.id, Users.login FROM Users"
     assert sql.SqlBuilder().Select().From(db.Users
@@ -104,6 +104,8 @@ def test_builder():
         ) == "SELECT Users.id, Users.login FROM Users " \
              "WHERE ((Users.id = 4) OR ((Users.name = 'Joe') " \
              "OR (Users.name = 'Sarah')))"
+             
+def test_delete():
     assert sql.SqlBuilder().Delete().From(db.Users).sql(db="sqlite") == \
         "DELETE FROM Users"
     assert sql.SqlBuilder().Delete().From(db.Users

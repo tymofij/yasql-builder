@@ -351,7 +351,7 @@ class SqlBuilder(object):
         self.where_conds |= reduce(operator.or_, args)
         return self
 
-    def Join(self, table, conditions=None, type="inner", *args, **kwargs):
+    def Join(self, table, conditions=None, type="inner"):
         # TODO
         return self
 
