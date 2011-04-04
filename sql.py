@@ -6,26 +6,35 @@ from collections import Iterable
 import sqlite3
 
 class Db(object):
+    """
+    Provides Db connection. Returns Tables as its properties.
+    """
     _settings = {}
 
     def __init__(self, **kwargs):
         self._settings['engine'] = kwargs['engine']
         self._settings['name'] = kwargs['name']
+        # Only sqlite for now
         if self._settings['engine'] == 'sqlite':
             self.__connection = sqlite3.connect(self._settings['name'])
         else:
             raise Exception("DB Backend not Implemented")
 
     def _execute(self, query):
+        """Execute given SQL, return cursor."""
         if self._settings['engine']:
             return self.__connection.execute(query)
         else:
             raise Exception("DB Backend not Implemented")
 
     def __getattr__(self, name):
+        """Return Table with given name."""
         return Table(name)
 
 class Table(object):
+    """
+    Used in constructing SQL and also returns Fields as its properties
+    """
     def __init__(self, name):
         # to avoid confusion with pretty common field 'name'
         self.__name = name
@@ -37,6 +46,7 @@ class Table(object):
         return self.__name
 
     def __getattr__(self, name):
+        """Return Fields with given name."""
         return Field(self, name)
 
 UPDATE = 'UPDATE'
@@ -57,9 +67,30 @@ def Count(obj=None):
     return expr.apply_func("COUNT")
 
 class Expr(object):
+    """
+    Represents arithmetic and logical expressions in SQL.
+    Supports SQL functions. Also is returned as a result of arithmetic or
+    logical operations on Field, Literal, Param and Alias.
+
+    Usage: Expr(..) + Expr(..),
+        Expr(..) > Literal(..),
+        (Expr(..) + Expr(..) + Expr(..) ) * Param(..)
+    Logical operations are performed using binary logic operators:
+        (Expr(..) | ~Expr(..) | Expr(..) ) & Param(..)
+        IN (...) is expressed as Expr(..)._in_(List(..))
+
+    Be aware that the order of operations is not working, use brackets.
+
+    When Expr has to do operation with object of a simple type like <int>
+    or <str>, it converts given object to Literal.
+
+    Expr.sql(..) is used to get representation of given Expr in given Db,
+    with given parameter list.
+
+    """
     def __new__(cls, *args, **kwargs):
         """
-        creates new Expr object or returns existing,
+        Creat new Expr object or return existing,
         if called with single parameter of type Expr.
         """
         if len(args) == 1 and isinstance(args[0], Expr):
@@ -72,8 +103,9 @@ class Expr(object):
         return obj
 
     def __init__(self, *args, **kwargs):
-        """ Initializes the Expression, accepting parameters as its children
-        simple types are treated as Literals for future sql representation
+        """
+        Initialize the Expression, accepting parameters as its children.
+        Simple types are treated as Literals for future SQL representation.
         """
         # except the case where just one expression was passed.
         # this situation is handled in __new__
@@ -88,12 +120,13 @@ class Expr(object):
 
     def join(self, other, operator):
         """
-        joins this Expression with other one.
-        if current is leaf object, then it is moved downwards as first child
+        Joins this Expression with other one.
+
+        If current is a leaf object, then it is moved downwards as first child
         and other one is added as second child
 
-        also that is performed when they are of different type etc.
-        when possible through other is added to children list
+        Also that is performed when they are of different types,
+        or has functions on them
         """
         if not isinstance(other, Expr):
             other = Expr(other)
@@ -123,10 +156,15 @@ class Expr(object):
             return self
 
     def is_multi(self):
-        """ returns True when this Expr contains other Exprs """
+        """Return True when this Expr contains other Exprs."""
         return [c for c in self.children if isinstance(c, Expr)]
 
     def apply_func(self, func):
+        """
+        Apply given SQL function to children.
+        If this node already have a function, then it is shifted downward,
+        and new one with needed function is added in its place
+        """
         if not self.func:
             self.func = func
             return self
@@ -166,6 +204,7 @@ class Expr(object):
         return self.join(other, 'IN')
 
     def __repr__(self):
+        """Represent this Expr using short notation and children's repr."""
         if self.is_multi(): # nested condition
             return ("<Expr: %s>" % self.operator)
         else:
@@ -173,23 +212,37 @@ class Expr(object):
                 repr(child) for child in self.children])
 
     def sql(self, **kwargs):
+        """
+        Generate SQL for this query.
+        Accepts anything and passes it down the rendering stack,
+        let the children pick what they need.
+        Namely, Param needs params dict, Literal needs db string (engine type)
+        """
         def sqlize(obj, **kwargs):
+            """
+            Call specialized .sql() on the object supporting it.
+            Call str() otherwise.
+            """
             if callable(getattr(obj, 'sql', None)):
                 return obj.sql(**kwargs)
             else:
                 return str(obj)
+
+        # That indicates that this is a leaf, or even special leaf *
         if self.operator is None:
             assert len(self.children) <= 1 or self.func, \
-                "Only function calls to * or literal can go without operator"
+               "Only function calls on * or Literal can go without an operator"
             if self.children:
+                # that's the only child
                 res = sqlize(self.children[0], **kwargs)
             else:
+                # childless node. If we got there, assume user wants a star.
                 res = "*"
             if self.func:
                 res = "%s(%s)" % (self.func, res)
             return res
         else:
-            # special case of IS NONE
+            # special handling of IS NULL and IS NOT NULL cases
             if self.operator in ('=', '!=') and len(self.children) == 2 \
                 and sqlize(self.children[1], **kwargs) == 'NULL':
                 operator = 'IS' if self.operator == '=' else 'IS NOT'
@@ -200,11 +253,15 @@ class Expr(object):
                 'expr':(" %s " % operator).join(
                             [sqlize(c, **kwargs) for c in self.children])
                 }
-
+    # str() is not really used in SqlBuilder, but it is handy for testing
     __str__ = sql
 
 
 class Overloaded(object):
+    """
+    Replaces logical and arithmetic operations with Expr's implementation.
+    Adds ._in_() function for issuing IN (...) condition
+    """
     def __eq__(self, other):
         return Expr(self, other, operator='=')
     def __ne__(self, other):
@@ -231,8 +288,8 @@ class Overloaded(object):
 
 class Literal(Overloaded):
     """
-    something passed to the query that needs to be transformed according to
-    database conventions
+    Represents object of a simple type passed to the query.
+    .sql() does the transformation according to database conventions
     """
     # good for testing, but in general case should be unnecessary
     default_db = None
@@ -244,12 +301,14 @@ class Literal(Overloaded):
         return "<Literal:%s>" % self.sql()
 
     def bool_converter(value, db):
+        """Convert boolean value for use in database."""
         if db in ('postgres', 'rdbhost'):
             return "'t'" if value else "'f'"
         else:
             return '1' if value else '0'
 
     def string_converter(value, db):
+        """Convert string value for use in database."""
         replaces = [
             ("'", "''"),
             ('\\', '\\\\'),
@@ -292,12 +351,17 @@ class Literal(Overloaded):
     }
 
     def sql(self, **kwargs):
+        """Convert self.value to its string representation,
+        fit for passing to database.
+        """
         db = kwargs.get('db', self.default_db)
         if not db:
             raise Exception("Undefined db")
+        # find one in our list
         if type(self.value) in self.converters:
             return self.converters[type(self.value)](self.value, db)
         else:
+            # may be it is iterable?
             if isinstance(self.value, Iterable):
                 return "(%s)" % ", ".join(
                     [Literal(v).sql(db=db) for v in self.value])
@@ -305,12 +369,17 @@ class Literal(Overloaded):
                 raise Exception("No converter for %s" % type(self.value))
 
 class Param(Overloaded):
-    """ A parameter that can be passed to Expr and thus to SqlBuilder
+    """
+     A parameter that can be passed to Expr and thus to SqlBuilder
     """
     def __init__(self, name):
         self.name = name
 
     def sql(self, **kwargs):
+        """
+        Substitute the parameter with value in passed params,
+        then get SQL representation with Literal's help.
+        """
         if 'params' not in kwargs or self.name not in kwargs['params']:
             raise Exception('parameter "%s" not found' % self.name)
         return Literal(kwargs['params'][self.name]).sql(**kwargs)
@@ -319,13 +388,18 @@ class Param(Overloaded):
         return "<Param:%s>" % self.name
 
 class Alias(Overloaded):
-    """ Field alias that can be used in expressions
-    Does not get escaped
+    """
+    Field alias that can be used in expressions.
+    Does not get escaped at all.
     """
     def __init__(self, name):
         self.name = name
 
     def sql(self, **kwargs):
+        """
+        Get SQL represenation of self
+        Since the Alias is meant to be passed as is, just return self.name
+        """
         return self.name
 
     def __repr__(self):
@@ -517,10 +591,10 @@ class SqlBuilder(object):
         return res
 
     def FetchFrom(self, db):
+        res = db._execute(self.sql(db=db._settings['engine']))
         if self.query_type == SELECT:
-            return ResultIterator(self.select_fields,
-                db._execute(self.sql(db=db._settings['engine']))
-                )
+            return ResultIterator(self.select_fields, res)
+
 
 class ResultIterator(object):
     def __init__(self, fields, cursor):
