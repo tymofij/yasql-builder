@@ -5,9 +5,9 @@ import datetime
 from sql import Expr as E, Param as P, Literal as L
 db = sql.Db(engine='sqlite', name=':memory:')
 
-print sql.SqlBuilder().Select().From(db.Users).LeftJoin(db.Profiles, db.Users.profile_id == db.Profiles.id).sql(db="sqlite")
-print sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users).sql(db="sqlite")
-print sql.SqlBuilder().joins
+print sql.SqlBuilder().Select().From(db.Users).LeftJoin(
+        db.Profiles, db.Users.profile_id == db.Profiles.id
+        ).RightJoin(db.Departments).Where(db.Users.name == 'Dave').sql(db="sqlite")
 
 
 def test_table_field_repr():
@@ -128,3 +128,9 @@ def test_join():
         db.Profiles, db.Users.profile_id == db.Profiles.id
         ).sql(db="sqlite") == "SELECT * FROM Users "\
             "LEFT OUTER JOIN Profiles ON (Users.profile_id = Profiles.id)"
+    assert sql.SqlBuilder().Select().From(db.Users).LeftJoin(
+        db.Profiles, db.Users.profile_id == db.Profiles.id
+        ).RightJoin(db.Departments).Where(db.Users.name == 'Dave'
+        ).sql(db="sqlite") == "SELECT * FROM Users "\
+            "LEFT OUTER JOIN Profiles ON (Users.profile_id = Profiles.id) "\
+            "RIGHT OUTER JOIN Departments  WHERE (Users.name = 'Dave')"
