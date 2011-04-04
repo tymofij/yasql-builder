@@ -84,3 +84,10 @@ def test_builder():
         ).Where(db.Users.id == 4).And(db.Users.name == 'Joe').sql(db="sqlite"
         ) == "SELECT Users.id, Users.login FROM Users " \
              "WHERE ((Users.id = 4) AND (Users.name = 'Joe'))"
+    assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
+        ).Where(db.Users.id == 4
+        ).Or(db.Users.name == 'Joe', db.Users.name == 'Sarah').sql(db="sqlite"
+        ) == "SELECT Users.id, Users.login FROM Users " \
+             "WHERE ((Users.id = 4) OR (Users.name = 'Joe') " \
+             "OR (Users.name = 'Sarah'))"
+

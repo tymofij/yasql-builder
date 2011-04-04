@@ -269,7 +269,14 @@ class SqlBuilder(object):
         return self
 
     def And(self, *args):
+        assert self.where_conds, ".And() can be called only after .Where()"
         self.where_conds = self.where_conds & Expr(*args)
+        return self
+
+    def Or(self, *args):
+        assert self.where_conds, ".Or() can be called only after .Where()"
+        for arg in args:
+            self.where_conds = self.where_conds | Expr(arg)
         return self
 
     def GroupBy(self, *args):
@@ -301,4 +308,5 @@ class SqlBuilder(object):
         return res
 
     def FetchFrom(self, db):
+        # TODO
         pass
