@@ -6,29 +6,6 @@ import datetime
 from sql import Expr as E, Param as P, Literal as L
 db = sql.Db(engine='sqlite', name=':memory:')
 
-db = sql.Db(engine='sqlite', name=':memory:')
-db._execute("""CREATE TABLE Users (
-    id integer NOT NULL PRIMARY KEY,
-    login varchar(35) NOT NULL,
-    last_login_time datetime NOT NULL
-    )""")
-db._execute("""INSERT INTO Users(id, login, last_login_time)
-    VALUES(1, 'joe', '2009-12-24 02:13:11')""")
-db._execute("""INSERT INTO Users(id, login, last_login_time)
-    VALUES(2, 'bill', '2010-03-24 14:13:11')""")
-db._execute("""INSERT INTO Users(id, login, last_login_time)
-    VALUES(3, 'admin', '2011-01-24 22:13:11')""")
-
-
-query = sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
-    ).Where(db.Users.login != 'admin'
-    ).And(db.Users.last_login_time < P('since'))
-query.params = {'since': datetime.date(year=2010, month=1, day=1)}
-rows = query.FetchFrom(db)
-r = rows.next()
-print[x for x in r]
-print r[0]
-
 def test_table_field_repr():
     assert repr(db.xx) == "<Table:xx>"
     assert repr(db.Users) == "<Table:Users>"
