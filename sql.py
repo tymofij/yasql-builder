@@ -275,6 +275,18 @@ class Param(Overloaded):
         return "<Param:%s>" % self.name
 
 
+class Field(Overloaded):
+    def __init__(self, table, name):
+        self.table = table
+        self.name = name
+
+    def __str__(self):
+        return "%s.%s" % (str(self.table), self.name)
+
+    def __repr__(self):
+        return "<Field:%s>" % str(self)
+
+
 class Table(object):
     def __init__(self, name):
         # to avoid confusion with pretty common field 'name'
@@ -288,18 +300,6 @@ class Table(object):
 
     def __getattr__(self, name):
         return Field(self, name)
-
-
-class Field(Overloaded):
-    def __init__(self, table, name):
-        self.table = table
-        self.name = name
-
-    def __str__(self):
-        return "%s.%s" % (str(self.table), self.name)
-
-    def __repr__(self):
-        return "<Field:%s>" % str(self)
 
 
 class SqlBuilder(object):
@@ -435,4 +435,36 @@ class SqlBuilder(object):
         return res
 
     def FetchFrom(self, db):
-        return db._execute(self.sql(db=db._settings['engine']))
+        if self.query_type == SELECT:
+            return ResultIterator(self.select_fields,
+                db._execute(self.sql(db=db._settings['engine']))
+                )
+
+class ResultIterator(object):
+    def __init__(self, fields, cursor):
+        self.short_fields = [field.name.lower() for field in fields]
+        self.long_fields = [("%s__%s" % (str(field.table), field.name)).lower()
+                 for field in fields]
+        self.cursor = cursor
+
+    def next(self):
+        return RowWrapper(self.cursor.next(),
+            self.short_fields, self.long_fields)
+
+    def __iter__(self):
+        return self
+
+class RowWrapper(object):
+    def __init__(self, values, short_fields, long_fields):
+        self.values = values
+        self.short_fields = short_fields
+        self.long_fields = long_fields
+
+    def __getattr__(self, attr):
+        attr = attr.lower()
+        if not self.values:
+            return
+        if attr in self.short_fields:
+            return self.values[self.short_fields.index(attr)]
+        if attr in self.long_fields:
+            return self.values[self.long_fields.index(attr)]
