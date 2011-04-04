@@ -200,7 +200,8 @@ def test_fetch():
         ).Where(db.Users.login != 'admin').FetchFrom(db)
     assert dict((row.id, row.login) for row in rows) == {1: u'joe', 2: u'bill'}
 
-    query = sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
+    query = sql.SqlBuilder().Select(db.Users.id, (db.Users.login, 'lgn')
+        ).From(db.Users
         ).Where(db.Users.login != 'admin'
         ).And(db.Users.last_login_time < P('since'))
     query.params = {'since': datetime.date(year=2010, month=1, day=1)}
@@ -209,3 +210,5 @@ def test_fetch():
         {1: u'joe'}
     # second call, access to column by key
     assert u'joe' == query.FetchFrom(db).next()[1]
+    # third call, access by alias
+    assert u'joe' == query.FetchFrom(db).next().lgn

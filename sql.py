@@ -701,18 +701,34 @@ class ResultIterator(object):
     A wrapper over cursor returned from database,
     for each row returned from it, wraps it into RowWrapper,
     which allows accessing columns by their names or aliases.
+
+    Will silently fail for most cases where * is involved.
     """
     def __init__(self, fields, cursor):
         """Initialize, pregenerate lowercase column name arrays."""
-        self.short_fields = [field.name.lower() for field in fields]
-        self.long_fields = [("%s__%s" % (str(field.table), field.name)).lower()
-                 for field in fields]
+        short_fields = []
+        long_fields = []
+        alias_fields = []
+        for f in fields:
+            if isinstance(f, Field):
+                short_fields.append(f.name)
+                long_fields.append(("%s__%s" % (str(f.table), f.name)))
+                alias_fields.append(f.name)
+            elif isinstance(f, Iterable):
+                f, alias = f
+                short_fields.append(f.name)
+                long_fields.append(("%s__%s" % (str(f.table), f.name)))
+                alias_fields.append(alias)
+
+        self.short_fields = [f.lower() for f in short_fields]
+        self.long_fields = [f.lower() for f in long_fields]
+        self.alias_fields = [f.lower() for f in alias_fields]
         self.cursor = cursor
 
     def next(self):
         """Return RowWrapper for given row."""
         return RowWrapper(self.cursor.next(),
-            self.short_fields, self.long_fields)
+            self.short_fields, self.long_fields, self.alias_fields)
 
     def __iter__(self):
         """Indicate object as iterable"""
@@ -723,11 +739,12 @@ class RowWrapper(object):
     A wrapper over cursor row returned from database.
     Allows accessing it by name, table__name and alias.
     """
-    def __init__(self, values, short_fields, long_fields):
+    def __init__(self, values, short_fields, long_fields, alias_fields):
         """Initialize, save values and column name arrays."""
         self.values = values
         self.short_fields = short_fields
         self.long_fields = long_fields
+        self.alias_fields = alias_fields
 
     def __getattr__(self, attr):
         """
@@ -741,6 +758,9 @@ class RowWrapper(object):
             return self.values[self.short_fields.index(attr)]
         if attr in self.long_fields:
             return self.values[self.long_fields.index(attr)]
+        if attr in self.alias_fields:
+            return self.values[self.alias_fields.index(attr)]
+
 
     # this here to provide user with methods available in original value tuple
     def __repr__(self):
