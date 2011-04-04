@@ -6,6 +6,11 @@ import datetime
 from sql import Expr as E, Param as P, Literal as L
 db = sql.Db(engine='sqlite', name=':memory:')
 
+sql.Literal.default_db = 'sqlite'
+# no new node should be created
+print str( db.a.b._in_((1,2,3)) )
+
+
 def test_table_field_repr():
     assert repr(db.xx) == "<Table:xx>"
     assert repr(db.Users) == "<Table:Users>"
@@ -43,6 +48,9 @@ def test_exprs():
     # and this one also should not, because there is NOT
     assert str( (db.a.b == 1) & (db.b.c != 1) & ~(db.x.y == 'xx')) == \
         "((a.b = 1) AND (b.c != 1) AND NOT(x.y = 'xx'))"
+    # check IN
+    assert str( db.a.b._in_((1,2,3)) ) == "(a.b IN (1, 2, 3))"
+    assert str( E(db.a.b)._in_((1,2,3)) ) == "(a.b IN (1, 2, 3))"
     # return it to initial None
     sql.Literal.default_db = None
 

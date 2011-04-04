@@ -128,6 +128,8 @@ class Expr(object):
         return self.join(other, '*')
     def __div__(self, other):
         return self.join(other, '/')
+    def _in_(self, other):
+        return self.join(other, 'IN')
 
     def __repr__(self):
         if self.is_multi(): # nested condition
@@ -179,6 +181,8 @@ class Overloaded(object):
         return Expr(self, other, operator='*')
     def __div__(self, other):
         return Expr(self, other, operator='/')
+    def _in_(self, other):
+        return Expr(self, other, operator='IN')
 
 
 class Literal(Overloaded):
