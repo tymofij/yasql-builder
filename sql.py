@@ -293,12 +293,15 @@ class Field(Overloaded):
 
 class SqlBuilder(object):
     """ the query builder """
-    query_type = None
-    select_fields, from_tables = None, None
-    where_conds, having_conds = None, None
-    joins = []
-    limit = None
-    params = []
+
+    def __init__(self):
+        self.query_type = None
+        self.select_fields, self.from_tables, = None, None
+        self.set_fields = None
+        self.where_conds, self.having_conds = None, None
+        self.joins = []
+        self.limit = None
+        self.params = []
 
     def Select(self, *args, **kwargs):
         assert self.query_type is None, \
@@ -311,8 +314,8 @@ class SqlBuilder(object):
     def Update(self, update_table):
         assert self.query_type is None, \
             ".Update() can not be called once query type has been set"
-        self.query_type = UPDATE
         assert isinstance(update_table, Table), "Update accepts only tables"
+        self.query_type = UPDATE
         self.update_table = update_table
         return self
 
@@ -352,9 +355,23 @@ class SqlBuilder(object):
         self.where_conds |= reduce(operator.or_, args)
         return self
 
-    def Join(self, table, conditions=None, type="inner"):
-        # TODO
+    def Join(self, table, join_type, *args):
+        assert isinstance(table, Table), "Join accepts only tables"
+        self.joins.append({
+            'table': table,
+            'conds': reduce(operator.and_, args) if args else None,
+            'type' : join_type,
+            })
         return self
+
+    def InnerJoin(self, table, *args):
+        return self.Join(table, "INNER", *args)
+    def LeftJoin(self, table, *args):
+        return self.Join(table, "LEFT OUTER", *args)
+    def RightJoin(self, table, *args):
+        return self.Join(table, "RIGHT OUTER", *args)
+    def OuterJoin(self, table, *args):
+        return self.Join(table, "FULL OUTER", *args)
 
     def GroupBy(self, *args):
         # TODO
@@ -395,8 +412,16 @@ class SqlBuilder(object):
             assert self.from_tables, "From() clause is required."
             res += " FROM %s" % ", ".join(
                 [str(table) for table in self.from_tables])
+        if self.joins:
+            for j in self.joins:
+                res += " %(type)s JOIN %(table)s " % j
+                if j['conds']:
+                    res += "ON %s" % j['conds'].sql(params=self.params, db=db)
+
         if self.where_conds:
             res +=" WHERE %s" % self.where_conds.sql(params=self.params, db=db)
+        if self.limit:
+            res +="LIMIT %s" % self.limit
         return res
 
     def FetchFrom(self, db):

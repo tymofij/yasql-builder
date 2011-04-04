@@ -5,11 +5,10 @@ import datetime
 from sql import Expr as E, Param as P, Literal as L
 db = sql.Db(engine='sqlite', name=':memory:')
 
-q = sql.SqlBuilder().Update(db.a).Set(
-    (db.a.b, db.a.c + 4),(db.d.c, db.e.f * 8), simple_field = P('x')
-    ).Where(db.g.h == P('h'))
-q.params = {'x': 'XY', 'h': 'HH'}
-print q.sql(db="sqlite")
+print sql.SqlBuilder().Select().From(db.Users).LeftJoin(db.Profiles, db.Users.profile_id == db.Profiles.id).sql(db="sqlite")
+print sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users).sql(db="sqlite")
+print sql.SqlBuilder().joins
+
 
 def test_table_field_repr():
     assert repr(db.xx) == "<Table:xx>"
@@ -123,3 +122,7 @@ def test_update():
     assert q.sql(db="sqlite") == \
         "UPDATE a SET a.b = (a.c + 4) , d.c = (e.f * 8) , simple_field = 'XY'"\
         "  WHERE (g.h = 'HH')"
+
+def test_join():
+    assert sql.SqlBuilder().Select().From(db.Users).LeftJoin(db.Profiles, db.Users.profile_id == db.Profiles.id).sql(db="sqlite") == \
+        "SELECT * FROM Users LEFT OUTER JOIN Profiles ON (Users.profile_id = Profiles.id)"
