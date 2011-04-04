@@ -24,11 +24,25 @@ class Db(object):
     def __getattr__(self, name):
         return Table(name)
 
+class Table(object):
+    def __init__(self, name):
+        # to avoid confusion with pretty common field 'name'
+        self.__name = name
+
+    def __repr__(self):
+        return "<Table:%s>" % self.__name
+
+    def __str__(self):
+        return self.__name
+
+    def __getattr__(self, name):
+        return Field(self, name)
+
 UPDATE = 'UPDATE'
 SELECT = 'SELECT'
 DELETE = 'DELETE'
 
-BINARY_OPERATORS = ('=', '!=', '<', '<=', '>', '>=', 'IN')
+BINARY_OPS = ('=', '!=', '<', '<=', '>', '>=', 'IN')
 
 Max = lambda expr: expr.apply_func("MAX")
 Min = lambda expr: expr.apply_func("MIN")
@@ -77,9 +91,10 @@ class Expr(object):
         if not isinstance(other, Expr):
             other = Expr(other)
         # if current is not leaf and merge seems possible
-        if (self.operator == operator and not self.func
+        if (operator not in BINARY_OPS and
+                self.operator == operator and not self.func
                 # other is either multicond of the same operation type,
-                # non negated
+                # no functional call neither on us nor on him
                 and (other.operator == operator and not other.func
                     # or is a leaf:
                     or not other.is_multi())
@@ -304,21 +319,6 @@ class Field(Overloaded):
 
     def __repr__(self):
         return "<Field:%s>" % str(self)
-
-
-class Table(object):
-    def __init__(self, name):
-        # to avoid confusion with pretty common field 'name'
-        self.__name = name
-
-    def __repr__(self):
-        return "<Table:%s>" % self.__name
-
-    def __str__(self):
-        return self.__name
-
-    def __getattr__(self, name):
-        return Field(self, name)
 
 
 class SqlBuilder(object):

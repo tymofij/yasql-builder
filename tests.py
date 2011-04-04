@@ -11,6 +11,9 @@ def test_table_field_repr():
     assert repr(db.Users) == "<Table:Users>"
     assert repr(db.aa.bb) == "<Field:aa.bb>"
 
+sql.Literal.default_db = 'sqlite'
+print str( (db.a.b > 47 ) > 4 )
+
 def test_exprs():
     # monkeypatch Literal to make it work without db provided
     sql.Literal.default_db = 'sqlite'
@@ -51,6 +54,8 @@ def test_exprs():
     # check triple ones
     assert str( E(db.a.b) + 4 + 7 > 20 ) == "((a.b + 4 + 7) > 20)"
     assert str( db.a.b + 4 + 7 > 20 ) == "((a.b + 4 + 7) > 20)"
+    # some operators must not be merged in
+    assert str( (db.a.b > 47 ) > 4 ) == "((a.b > 47) > 4)"
     # IS NULL and NOT NULL
     assert str( db.a.b == None ) == "(a.b IS NULL)"
     assert str( db.a.b != None ) == "(a.b IS NOT NULL)"
