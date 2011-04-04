@@ -3,17 +3,13 @@
 import sql
 import datetime
 
-from sql import Expr as E, Param as P, Literal as L
+from sql import Expr as E, Param as P, Literal as L, Alias as A
 db = sql.Db(engine='sqlite', name=':memory:')
 
 def test_table_field_repr():
     assert repr(db.xx) == "<Table:xx>"
     assert repr(db.Users) == "<Table:Users>"
     assert repr(db.aa.bb) == "<Field:aa.bb>"
-
-print sql.SqlBuilder().Select(sql.Count()).From(db.Users).Where(db.Users.id > 12
-        ).GroupBy(db.Users.name).Having(sql.Count() > 4).OrderBy(db.Users.name).Limit(5).sql(db="sqlite")
-
 
 def test_exprs():
     # monkeypatch Literal to make it work without db provided
@@ -104,11 +100,14 @@ def test_literals():
 def test_select():
     assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
         ).sql(db="sqlite") == "SELECT Users.id, Users.login FROM Users"
+
     assert sql.SqlBuilder().Select().From(db.Users
         ).sql(db="sqlite") == "SELECT * FROM Users"
+
     assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
         ).Where(db.Users.id == 4).sql(db="sqlite") == \
         "SELECT Users.id, Users.login FROM Users WHERE (Users.id = 4)"
+
     assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
         ).Where(db.Users.id == 4, db.Users.name == 'Joe').sql(db="sqlite"
         ) == "SELECT Users.id, Users.login FROM Users " \
@@ -118,12 +117,14 @@ def test_select():
         ).Where(db.Users.id == 4).And(db.Users.name == 'Joe').sql(db="sqlite"
         ) == "SELECT Users.id, Users.login FROM Users " \
              "WHERE ((Users.id = 4) AND (Users.name = 'Joe'))"
+
     assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
         ).Where(db.Users.id == 4
         ).Or(db.Users.name == 'Joe', db.Users.name == 'Sarah').sql(db="sqlite"
         ) == "SELECT Users.id, Users.login FROM Users " \
              "WHERE ((Users.id = 4) OR ((Users.name = 'Joe') " \
              "OR (Users.name = 'Sarah')))"
+
     assert sql.SqlBuilder().Select(sql.Count()).From(db.Users
         ).Where(db.Users.id > 12
         ).GroupBy(db.Users.name
@@ -132,9 +133,24 @@ def test_select():
             "SELECT COUNT(*) FROM Users WHERE (Users.id > 12) "\
             "GROUP_BY Users.name HAVING (COUNT(*) > 4) LIMIT 5"
 
+    assert sql.SqlBuilder().Select((sql.Count(),'X')).From(db.Users
+        ).Where(db.Users.id > 12).GroupBy(db.Users.name).Having(A('X') > 4
+        ).OrderBy(db.Users.name).Limit(5).sql(db="sqlite") == \
+            "SELECT COUNT(*) AS X FROM Users WHERE (Users.id > 12) "\
+            "GROUP_BY Users.name HAVING (X > 4) LIMIT 5"
+
+    assert sql.SqlBuilder().Select(db.z).From(db.z, db.e
+        ).Where(db.z.id == db.e.xid).sql(db="sqlite") == \
+            "SELECT z.* FROM z, e WHERE (z.id = e.xid)"
+
+    assert sql.SqlBuilder().Select(
+        ).From((db.Users, 'u'), (db.Profiles, 'p')).sql(db="sqlite") == \
+        "SELECT * FROM Users u, Profiles p"
+
 def test_delete():
     assert sql.SqlBuilder().Delete().From(db.Users).sql(db="sqlite") == \
         "DELETE FROM Users"
+
     assert sql.SqlBuilder().Delete().From(db.Users
         ).Where(db.Users.id == 4).sql(db="sqlite") == \
         "DELETE FROM Users WHERE (Users.id = 4)"
@@ -153,6 +169,7 @@ def test_join():
         db.Profiles, db.Users.profile_id == db.Profiles.id
         ).sql(db="sqlite") == "SELECT * FROM Users "\
             "LEFT OUTER JOIN Profiles ON (Users.profile_id = Profiles.id)"
+
     assert sql.SqlBuilder().Select().From(db.Users).LeftJoin(
         db.Profiles, db.Users.profile_id == db.Profiles.id
         ).RightJoin(db.Departments).Where(db.Users.name == 'Dave'

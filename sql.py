@@ -2,6 +2,7 @@ import copy
 import datetime
 from types import NoneType
 import operator
+from collections import Iterable
 import sqlite3
 
 class Db(object):
@@ -79,7 +80,7 @@ class Expr(object):
         if args and (len(args) != 1 or not isinstance(args[0], Expr)):
             children = []
             for child in args:
-                if not isinstance(child, (Expr, Param, Field)):
+                if not isinstance(child, (Expr, Param, Field, Alias)):
                     child = Literal(child)
                 children.append(child)
             self.children = children
@@ -297,12 +298,10 @@ class Literal(Overloaded):
         if type(self.value) in self.converters:
             return self.converters[type(self.value)](self.value, db)
         else:
-            try:
-                # may be it is iterable?
-                iter(self.value)
+            if isinstance(self.value, Iterable):
                 return "(%s)" % ", ".join(
                     [Literal(v).sql(db=db) for v in self.value])
-            except TypeError:
+            else:
                 raise Exception("No converter for %s" % type(self.value))
 
 class Param(Overloaded):
@@ -318,6 +317,19 @@ class Param(Overloaded):
 
     def __repr__(self):
         return "<Param:%s>" % self.name
+
+class Alias(Overloaded):
+    """ Field alias that can be used in expressions
+    Does not get escaped
+    """
+    def __init__(self, name):
+        self.name = name
+
+    def sql(self, **kwargs):
+        return self.name
+
+    def __repr__(self):
+        return "<Alias:%s>" % self.name
 
 
 class Field(Overloaded):
@@ -337,9 +349,12 @@ class SqlBuilder(object):
 
     def __init__(self):
         self.query_type = None
-        self.select_fields, self.from_tables, = None, None
-        self.set_fields, self.group_fields = None, None
-        self.where_conds, self.having_conds = None, None
+        self.select_fields = []
+        self.from_tables = []
+        self.where_conds = []
+        self.group_fields = []
+        self.having_conds = []
+        self.set_fields = []
         self.joins = []
         self.limit = None
         self.params = []
@@ -348,8 +363,14 @@ class SqlBuilder(object):
         assert self.query_type is None, \
             ".Select() can not be called once query type has been set"
         self.query_type = SELECT
-        # TODO: field aliases, tables in the list, to indicate table.*
-        self.select_fields = args
+        for arg in args:
+            if isinstance(arg, (Field, Table, Expr)):
+                self.select_fields.append(arg)
+            # we accept tuples and lists here, which are surely Iterable
+            # if somebody passes Iterable without __getitem__ he will get excp
+            elif isinstance(arg, Iterable) \
+                and isinstance(arg[0], (Field, Expr)):
+                self.select_fields.append(arg[:2])
         return self
 
     def Update(self, update_table):
@@ -376,8 +397,11 @@ class SqlBuilder(object):
     def From(self, *args, **kwargs):
         assert self.query_type in (SELECT, DELETE), \
             "From() is available only for Select() and Update() queries."
-        # TODO: tables aliases
-        self.from_tables = args
+        for arg in args:
+            if isinstance(arg, Table):
+                self.from_tables.append(arg)
+            elif isinstance(arg, Iterable) and isinstance(arg[0], Table):
+                self.from_tables.append(arg[:2])
         return self
 
     def Where(self, *args):
@@ -450,8 +474,20 @@ class SqlBuilder(object):
                                     for (field, expr) in self.set_fields ]),
                 )
         elif self.query_type == SELECT:
-                res = "SELECT %s" % (", ".join(
-                    [str(field) for field in self.select_fields]) or "*")
+                res = "SELECT "
+                if not self.select_fields:
+                    res += "*"
+                else:
+                    str_fields = []
+                    for f in self.select_fields:
+                        if isinstance(f, (Field, Expr)):
+                            str_fields.append(str(f))
+                        elif isinstance(f, Table):
+                            str_fields.append("%s.*" % str(f))
+                        elif isinstance(f, Iterable):
+                            str_fields.append("%s AS %s" % f)
+                    res += ", ".join(str_fields)
+
         elif self.query_type == DELETE:
                 res = "DELETE"
         else:
@@ -459,7 +495,8 @@ class SqlBuilder(object):
         if self.query_type in (SELECT, DELETE):
             assert self.from_tables, "From() clause is required."
             res += " FROM %s" % ", ".join(
-                [str(table) for table in self.from_tables])
+                [str(t) if isinstance(t, Table) else ("%s %s" % t)
+                    for t in self.from_tables])
         if self.joins:
             for j in self.joins:
                 res += " %(type)s JOIN %(table)s " % j
