@@ -33,7 +33,8 @@ class Db(object):
 
 class Table(object):
     """
-    Used in constructing SQL and also returns Fields as its properties
+    Used in constructing SQL and also returns Fields as its properties.
+    Is not checked for presence in database.
     """
     def __init__(self, name):
         # to avoid confusion with pretty common field 'name'
@@ -407,6 +408,9 @@ class Alias(Overloaded):
 
 
 class Field(Overloaded):
+    """
+    Represents table field. Used in SQL expressions.
+    """
     def __init__(self, table, name):
         self.table = table
         self.name = name
@@ -419,9 +423,28 @@ class Field(Overloaded):
 
 
 class SqlBuilder(object):
-    """ the query builder """
+    """
+    Builds SQL query.
+
+    Supports SELECT, UPDATE and DELETE queries. Syntax:
+
+    Select(field or tuple, ..).From(table or tuple, ..).Where(Expr, ..).
+        Having(Expr, ..).GroupBy(Expr).Limit(n..)
+
+    Delete().From(table or tuple, ..).Where(Expr, ..).Limit(n..)
+
+    Update(table).Set((Field, Expr),..).Where(Expr, ..)
+
+    NOTE: Presense of all fields and table.fields currently is not enforced, so
+    if you pass db.x.y when table x does not exist and is not present in any
+    FROM clauses the query will still be executed.
+
+    Query is evaluated when you issue .FetchRows(db)
+        where db is open database connection of type Db()
+    """
 
     def __init__(self):
+        """Initialize the sql with empty values, to make checking simpler."""
         self.query_type = None
         self.select_fields = []
         self.from_tables = []
@@ -433,7 +456,13 @@ class SqlBuilder(object):
         self.limit = None
         self.params = []
 
-    def Select(self, *args, **kwargs):
+    def Select(self, *args):
+        """
+        Fill fields which are to be selected.
+        Each parameter is either a field or a tuple of (Field, alias).
+        Latter ones will be represented in SQL as "field as alias"
+        Alias is a string, it is not escaped because is meant to be used as-is.
+        """
         assert self.query_type is None, \
             ".Select() can not be called once query type has been set"
         self.query_type = SELECT
@@ -448,6 +477,7 @@ class SqlBuilder(object):
         return self
 
     def Update(self, update_table):
+        """Fill in the name of the table to be updated."""
         assert self.query_type is None, \
             ".Update() can not be called once query type has been set"
         assert isinstance(update_table, Table), "Update accepts only tables"
@@ -456,6 +486,12 @@ class SqlBuilder(object):
         return self
 
     def Set(self, *args, **kwargs):
+        """
+        Fill in the list of fields to be updated and their respective Exprs.
+        Parameters:
+            Ordered : tuples of (Field, Expr).
+            Keywords: alias=Expr, where alias is a string.
+        """
         assert self.query_type == UPDATE, \
             ".Set() is only available for Update() queries"
         self.set_fields = [(field, Expr(expr)) for (field, expr)
@@ -463,12 +499,21 @@ class SqlBuilder(object):
         return self
 
     def Delete(self):
+        """
+        Sets the query type to DELETE
+        """
         assert self.query_type is None, \
             ".Delete() can not be called once query type has been set"
         self.query_type = DELETE
         return self
 
-    def From(self, *args, **kwargs):
+    def From(self, *args):
+        """
+        Fill in the list of tables in WHERE clause.
+
+        Parameters are Tables or tuples of (Table, alias)
+        where alias is a string
+        """
         assert self.query_type in (SELECT, DELETE), \
             "From() is available only for Select() and Update() queries."
         for arg in args:
@@ -479,10 +524,20 @@ class SqlBuilder(object):
         return self
 
     def Where(self, *args):
+        """
+        Fill in the WHERE clause with conditions.
+        They are expected to be of Expr type and are ANDed together
+        """
         self.where_conds = reduce(operator.and_, args)
         return self
 
     def And(self, *args):
+        """
+        Add one or more AND condition to WHERE or HAVING clause,
+        whichever is last
+        If several Exprs passed, they are ANDed together
+        and than ANDed to the right of current WHERE or HAVING
+        """
         assert self.where_conds or self.having_conds, \
             ".And() can be called only after .Where() or .Having()"
         if not self.having_conds:
@@ -492,6 +547,12 @@ class SqlBuilder(object):
         return self
 
     def Or(self, *args):
+        """
+        Add one or more OR condition to WHERE or HAVING clause,
+        whichever is last
+        If several Exprs passed, they are ORed together
+        and than ORed to the right of current WHERE or HAVING
+        """
         assert self.where_conds or self.having_conds, \
             ".Or() can be called only after .Where() or .Having()"
         if not self.having_conds:
@@ -501,6 +562,14 @@ class SqlBuilder(object):
         return self
 
     def Join(self, table, join_type, *args):
+        """
+        Construct JOIN clause.
+
+        Table is either a Table or a tuple of (Table, alias).
+        join_type is a string, but also there are shortcut methods
+            InnerJoin, OuterJoin, LeftJoin, RightJoin where it comes prefilled.
+        Rest of parameters are join conditions. They are ANDed together.
+        """
         self.joins.append({
             'table': table if isinstance(table, Table) else "%s %s" % table,
             'conds': reduce(operator.and_, args) if args else None,
@@ -508,33 +577,61 @@ class SqlBuilder(object):
             })
         return self
     def InnerJoin(self, table, *args):
+        """
+        Construct INNER JOIN.
+
+        table is either a Table or a tuple of (Table, alias)
+        Rest of parameters are join conditions. They are ANDed together.
+        """
         return self.Join(table, "INNER", *args)
     def LeftJoin(self, table, *args):
+        """
+        Construct LEFT OUTER JOIN.
+
+        table is either a Table or a tuple of (Table, alias)
+        Rest of parameters are join conditions. They are ANDed together.
+        """
         return self.Join(table, "LEFT OUTER", *args)
     def RightJoin(self, table, *args):
+        """
+        Construct RIGHT OUTER JOIN.
+
+        table is either a Table or a tuple of (Table, alias)
+        Rest of parameters are join conditions. They are ANDed together.
+        """
         return self.Join(table, "RIGHT OUTER", *args)
     def OuterJoin(self, table, *args):
+        """
+        Construct OUTER JOIN.
+
+        table is either a Table or a tuple of (Table, alias)
+        Rest of parameters are join conditions. They are ANDed together.
+        """
         return self.Join(table, "FULL OUTER", *args)
 
     def GroupBy(self, *args):
+        """Construct GROUP BY clause. Parameters are Fields and Aliases."""
         self.group_fields = args
         return self
 
     def Having(self, *args):
+        """Construct HAVING clause. Parameters are Exprs."""
         assert self.group_fields, "Having can only be used after GroupBy"
         self.having_conds = reduce(operator.and_, args)
         return self
 
     def OrderBy(self, *args):
+        """Construct ORDER BY clause. Parameters are Fields and Aliases."""
         self.order_fields = args
         return self
 
     def Limit(self, num_rows):
+        """Sets LIMIT BY clause. Parameter is a number"""
         self.limit = num_rows
         return self
 
     def sql(self, db=None):
-        """ Construct sql to be executed
+        """Construct sql to be executed
         db parameter indicates type of database engine
         """
         opts = {'params': self.params, 'db': db}
@@ -591,32 +688,52 @@ class SqlBuilder(object):
         return res
 
     def FetchFrom(self, db):
+        """Actually execute the query.
+        For SELECTs return ResultIterator for easy field retrieval
+        """
         res = db._execute(self.sql(db=db._settings['engine']))
         if self.query_type == SELECT:
             return ResultIterator(self.select_fields, res)
 
 
 class ResultIterator(object):
+    """
+    A wrapper over cursor returned from database,
+    for each row returned from it, wraps it into RowWrapper,
+    which allows accessing columns by their names or aliases.
+    """
     def __init__(self, fields, cursor):
+        """Initialize, pregenerate lowercase column name arrays."""
         self.short_fields = [field.name.lower() for field in fields]
         self.long_fields = [("%s__%s" % (str(field.table), field.name)).lower()
                  for field in fields]
         self.cursor = cursor
 
     def next(self):
+        """Return RowWrapper for given row."""
         return RowWrapper(self.cursor.next(),
             self.short_fields, self.long_fields)
 
     def __iter__(self):
+        """Indicate object as iterable"""
         return self
 
 class RowWrapper(object):
+    """
+    A wrapper over cursor row returned from database.
+    Allows accessing it by name, table__name and alias.
+    """
     def __init__(self, values, short_fields, long_fields):
+        """Initialize, save values and column name arrays."""
         self.values = values
         self.short_fields = short_fields
         self.long_fields = long_fields
 
     def __getattr__(self, attr):
+        """
+        Attempt to find given column name in our arrays.
+        If successful, return it.
+        """
         attr = attr.lower()
         if not self.values:
             return
@@ -625,6 +742,7 @@ class RowWrapper(object):
         if attr in self.long_fields:
             return self.values[self.long_fields.index(attr)]
 
+    # this here to provide user with methods available in original value tuple
     def __repr__(self):
         return repr(self.values)
     def __str__(self):
