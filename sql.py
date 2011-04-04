@@ -3,6 +3,15 @@ import datetime
 from types import NoneType
 
 class Db(object):
+    __settings = {
+        # 'engine': 'sqlite',
+        # 'name': 'somewhere',
+    }
+
+    def __init__(self, **kwargs):
+        self.__settings['engine'] = kwargs['engine']
+        self.__settings['name'] = kwargs['name']
+
     def __getattr__(self, name):
         return Table(name)
 
@@ -93,7 +102,7 @@ class Expr(object):
 
     def __repr__(self):
         if self.is_multi(): # nested condition
-            return ("<Expr: %s>" % self.operator).strip()
+            return ("<Expr: %s>" % self.operator)
         else:
             return "<Expr: %s>" % (" %s " % self.operator).join([
                 repr(child) for child in self.children])
@@ -243,24 +252,43 @@ class Field(object):
 class SqlBuilder(object):
     """ the query builder """
     select_fields, from_tables, where_conds = None, None, None
+    params = []
 
     def Select(self, *args, **kwargs):
+        # TODO: field aliases, tables in the list, to indicate table.*
         self.select_fields = args
         return self
 
-    def From(self, *args):
+    def From(self, *args, **kwargs):
+        # TODO: tables in a list, to indicate table.*
         self.from_tables = args
         return self
 
     def Where(self, *args):
-        self.where_conds = list(args)
+        self.where_conds = Expr(*args)
         return self
 
     def And(self, *args):
-        self.where_conds.extend(args)
+        self.where_conds = self.where_conds & Expr(*args)
         return self
 
-    def sql(self):
+    def GroupBy(self, *args):
+        # TODO
+        pass
+
+    def Having(self, *args):
+        # TODO
+        pass
+
+    def OrderBy(self, *args):
+        # TODO
+        pass
+
+    def Limit(self, num_rows):
+        # TODO
+        pass
+
+    def sql(self, db=None):
         """ Construct sql to be executed """
         res = "SELECT %(select_fields)s FROM %(from_tables)s" % {
             'from_tables':
@@ -269,9 +297,7 @@ class SqlBuilder(object):
                 ", ".join([str(field) for field in self.select_fields]) or "*"
         }
         if self.where_conds:
-            res += " WHERE %s" % \
-                 " AND ".join([str(cond) for cond in self.where_conds])
-
+            res +=" WHERE %s" % self.where_conds.sql(params=self.params, db=db)
         return res
 
     def FetchFrom(self, db):

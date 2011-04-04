@@ -3,18 +3,12 @@
 import sql
 import datetime
 from sql import Expr as E, Param as P, Literal as L
-db = sql.Db()
+db = sql.Db(engine='sqlite', name=':memory:')
 
-
-#print repr(db.xx)
-#print repr(db.Users)
-#print repr(db.aa.bb)
-
-#query = sql.SqlBuilder()
-#print query.Select(db.Users.id, db.Users.login).From(db.Users).sql()
-#print query.Select().From(db.Users).sql()
-#print query.Select(db.Users.a, db.Users.b).From(db.Users).Where(db.Users.id == 4).sql()
-#print query.Select(db.Users.a, db.Users.b).From(db.Users).Where(db.Users.id == 4).And(db.Users.name == 'Joe').sql()
+def test_table_field_repr():
+    assert repr(db.xx) == "<Table:xx>"
+    assert repr(db.Users) == "<Table:Users>"
+    assert repr(db.aa.bb) == "<Field:aa.bb>"
 
 def test_exprs():
     # monkeypatch Literal to make it work without db provided
@@ -77,3 +71,16 @@ def test_literals():
     assert L(None).sql(db='sqlite') == 'NULL'
     assert L(True).sql(db='mysql') == '1'
     assert L(True).sql(db='postgres') == "'t'"
+
+def test_builder():
+    assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
+        ).sql(db="sqlite") == "SELECT Users.id, Users.login FROM Users"
+    assert sql.SqlBuilder().Select().From(db.Users
+        ).sql(db="sqlite") == "SELECT * FROM Users"
+    assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
+        ).Where(db.Users.id == 4).sql(db="sqlite") == \
+        "SELECT Users.id, Users.login FROM Users WHERE (Users.id = 4)"
+    assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
+        ).Where(db.Users.id == 4).And(db.Users.name == 'Joe').sql(db="sqlite"
+        ) == "SELECT Users.id, Users.login FROM Users " \
+             "WHERE ((Users.id = 4) AND (Users.name = 'Joe'))"
