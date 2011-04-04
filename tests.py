@@ -5,10 +5,8 @@ import datetime
 from sql import Expr as E, Param as P, Literal as L
 db = sql.Db(engine='sqlite', name=':memory:')
 
-print sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
-        ).Where(db.Users.id == 4
-        ).Or(db.Users.name == 'Joe', db.Users.name == 'Sarah').sql(db="sqlite"
-        )
+sql.Literal.default_db = 'sqlite'
+print sql.SqlBuilder().Update(db.x).Set(a=2, b='x').sql(db="sqlite")
 
 def test_table_field_repr():
     assert repr(db.xx) == "<Table:xx>"
@@ -25,6 +23,9 @@ def test_exprs():
       "[<Expr: <Field:a.b> = <Literal:1>>, <Expr: <Field:b.c> != <Literal:1>>]"
     # a group is represented by its operator
     assert repr(E((db.a.b == 1) & (db.b.c != 1))) == "<Expr: AND>"
+    # Literals can be passed in
+    assert repr(E(1)) == "<Expr: <Literal:1>>"
+    assert repr(E('x')) == "<Expr: <Literal:'x'>>"
     # simple stringification
     assert str(E((db.a.b == 1) & (db.b.c != 1))) == "((a.b = 1) AND (b.c != 1))"
     # merging in a leaf
@@ -54,6 +55,7 @@ def test_params():
     # no new node should be created
     assert E(E(db.z.i, P('a'), operator='=')).sql(**opts) == "(z.i = 'AAA')"
     assert repr(P('x')) == "<Param:x>"
+    assert repr(E(P('x'))) == "<Expr: <Param:x>>"
     # simple stringification
     assert (E((db.a.b == P('a')) & (db.b.c != P('b')))).sql(**opts) == \
         "((a.b = 'AAA') AND (b.c != 'BBB'))"
@@ -96,7 +98,6 @@ def test_builder():
         ).Where(db.Users.id == 4).And(db.Users.name == 'Joe').sql(db="sqlite"
         ) == "SELECT Users.id, Users.login FROM Users " \
              "WHERE ((Users.id = 4) AND (Users.name = 'Joe'))"
-    # XXX: this one could be nicer
     assert sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users
         ).Where(db.Users.id == 4
         ).Or(db.Users.name == 'Joe', db.Users.name == 'Sarah').sql(db="sqlite"

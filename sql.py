@@ -18,6 +18,9 @@ class Db(object):
 
 AND = "AND"
 OR = "OR"
+UPDATE = 'UPDATE'
+SELECT = 'SELECT'
+DELETE = 'DELETE'
 
 class Expr(object):
     negative = False
@@ -261,25 +264,34 @@ class SqlBuilder(object):
     def Select(self, *args, **kwargs):
         assert self.query_type is None, \
             ".Select() can not be called once query type has been set"
-        self.query_type = 'SELECT'
+        self.query_type = SELECT
         # TODO: field aliases, tables in the list, to indicate table.*
         self.select_fields = args
         return self
 
-    def Update(self, **kwargs):
+    def Update(self, update_table):
         assert self.query_type is None, \
             ".Update() can not be called once query type has been set"
-        self.query_type = 'UPDATE'
-        self.update_fields = kwargs
+        self.query_type = UPDATE
+        self.update_table = update_table
+        return self
+
+    def Set(self, *args, **kwargs):
+        assert self.query_type == UPDATE, \
+            ".Set() is only available for Update() queries"
+        self.set_fields = [(field, Expr(expr)) for (field, expr)
+                in (list(args) + list(kwargs.items()))]
         return self
 
     def Delete(self):
         assert self.query_type is None, \
             ".Delete() can not be called once query type has been set"
-        self.query_type = 'DELETE'
+        self.query_type = DELETE
         return self
 
     def From(self, *args, **kwargs):
+        assert self.query_type in (SELECT, DELETE), \
+            "From() is available only for Select() and Update() queries."
         # TODO: tables aliases
         self.from_tables = args
         return self
@@ -298,6 +310,10 @@ class SqlBuilder(object):
         assert self.where_conds or self.having_conds, \
             ".Or() can be called only after .Where() or .Having()"
         self.where_conds |= reduce(operator.or_, args)
+        return self
+
+    def Join(self, *args, **kwargs):
+        # TODO
         return self
 
     def GroupBy(self, *args):
@@ -320,20 +336,25 @@ class SqlBuilder(object):
         """ Construct sql to be executed
         db parameter indicates type of database engine
         """
-        assert self.from_tables, "From() clause is required."
-        if self.query_type == 'SELECT':
-            res = "SELECT %s" % (", ".join(
-                [str(field) for field in self.select_fields]) or "*")
-        elif self.query_type == 'DELETE':
-            res = "DELETE"
-        elif self.query_type == 'UPDATE':
-            res = "UPDATE %s" % ", ".join(
-                ["%s = %s " % (str(field), expr.sql(params=self.params, db=db))
-                    for (field, expr) in self.update_fields ])
+        if self.query_type == UPDATE:
+            assert self.set_fields, "No field setting rules issued, use Set()"
+            res = "UPDATE %s SET %s" % (
+                self.update_table,
+                ", ".join(["%s = %s " %
+                    (str(field), expr.sql(params=self.params, db=db))
+                                    for (field, expr) in self.set_fields ]),
+                )
+        elif self.query_type == SELECT:
+                res = "SELECT %s" % (", ".join(
+                    [str(field) for field in self.select_fields]) or "*")
+        elif self.query_type == DELETE:
+                res = "DELETE"
         else:
             raise Exception("Unknown query type")
-        res += " FROM %s" % ", ".join(
-            [str(table) for table in self.from_tables])
+        if self.query_type in (SELECT, DELETE):
+            assert self.from_tables, "From() clause is required."
+            res += " FROM %s" % ", ".join(
+                [str(table) for table in self.from_tables])
         if self.where_conds:
             res +=" WHERE %s" % self.where_conds.sql(params=self.params, db=db)
         return res
