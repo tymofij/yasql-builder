@@ -31,10 +31,6 @@ DELETE = 'DELETE'
 BINARY_OPERATORS = ('=', '!=', '<', '<=', '>', '>=', 'IN')
 
 class Expr(object):
-    negative = False
-    children = [] # sub-expressions or literals
-    operator = None # what connects them
-
     def __new__(cls, *args, **kwargs):
         """
         creates new Expr object or returns existing,
@@ -43,7 +39,11 @@ class Expr(object):
         if len(args) == 1 and isinstance(args[0], Expr):
             return args[0]
         # default object
-        return object.__new__(cls)
+        obj = object.__new__(cls)
+        obj.func = ''
+        obj.children = [] # sub-expressions or literals
+        obj.operator = None # what connects them
+        return obj
 
     def __init__(self, *args, **kwargs):
         """ Initializes the Expression, accepting parameters as its children
@@ -72,10 +72,10 @@ class Expr(object):
         if not isinstance(other, Expr):
             other = Expr(other)
         # if current is not leaf and merge seems possible
-        if (self.operator == operator and not self.negative
+        if (self.operator == operator and not self.func
                 # other is either multicond of the same operation type,
                 # non negated
-                and (other.operator == operator and not other.negative
+                and (other.operator == operator and not other.func
                     # or is a leaf:
                     or not other.is_multi())
                 ):
@@ -98,13 +98,22 @@ class Expr(object):
         """ returns True when this Expr contains other Exprs """
         return [c for c in self.children if isinstance(c, Expr)]
 
+    def apply_func(self, func):
+        if not self.func:
+            self.func = func
+            return self
+        else:
+            obj = Expr()
+            obj.children.append(self)
+            obj.func = func
+            return obj
+
     def __or__(self, other):
         return self.join(other, "OR")
     def __and__(self, other):
         return self.join(other, "AND")
     def __invert__(self):
-        self.negative = not self.negative
-        return self
+        return self.apply_func("NOT")
     def __eq__(self, other):
         return self.join(other, '=')
     def __ne__(self, other):
@@ -144,8 +153,8 @@ class Expr(object):
         if self.operator is None:
             assert len(self.children) == 1, "No operator for multichild Expr"
             res = sqlize(self.children[0], **kwargs)
-            if self.negative:
-                res = "NOT(%s)" % res
+            if self.func:
+                res = "%s(%s)" % (self.func, res)
             return res
         else:
             # special case of IS NONE
@@ -154,8 +163,8 @@ class Expr(object):
                 operator = 'IS' if self.operator == '=' else 'IS NOT'
             else:
                 operator = self.operator
-            return "%(not)s(%(expr)s)" % {
-                'not': 'NOT' if self.negative else '',
+            return "%(func)s(%(expr)s)" % {
+                'func': self.func,
                 'expr':(" %s " % operator).join(
                             [sqlize(c, **kwargs) for c in self.children])
                 }
@@ -268,8 +277,6 @@ class Literal(Overloaded):
 class Param(Overloaded):
     """ A parameter that can be passed to Expr and thus to SqlBuilder
     """
-    name = ''
-
     def __init__(self, name):
         self.name = name
 

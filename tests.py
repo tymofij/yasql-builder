@@ -11,6 +11,9 @@ def test_table_field_repr():
     assert repr(db.Users) == "<Table:Users>"
     assert repr(db.aa.bb) == "<Field:aa.bb>"
 
+sql.Literal.default_db = 'sqlite'
+print str(~E(~E((db.a.b > 1) & (db.b.c != 1))))
+
 def test_exprs():
     # monkeypatch Literal to make it work without db provided
     sql.Literal.default_db = 'sqlite'
@@ -26,7 +29,8 @@ def test_exprs():
     assert repr(E(1)) == "<Expr: <Literal:1>>"
     assert repr(E('x')) == "<Expr: <Literal:'x'>>"
     # simple stringification
-    assert str(E((db.a.b > 1) & (db.b.c != 1))) == "((a.b > 1) AND (b.c != 1))"
+    assert str(~E(~E((db.a.b > 1) & (db.b.c != 1)))) == \
+        "NOT(NOT((a.b > 1) AND (b.c != 1)))"
     # merging in a leaf
     assert str(E((db.a.b >= 1) & (db.b.c != 1)) & E(db.x.y == 'xx')) == \
         "((a.b >= 1) AND (b.c != 1) AND (x.y = 'xx'))"
