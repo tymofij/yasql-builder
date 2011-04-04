@@ -2,16 +2,27 @@ import copy
 import datetime
 from types import NoneType
 import operator
+import sqlite3
 
 class Db(object):
-    __settings = {
+    _settings = {
         # 'engine': 'sqlite',
         # 'name': 'somewhere',
     }
 
     def __init__(self, **kwargs):
-        self.__settings['engine'] = kwargs['engine']
-        self.__settings['name'] = kwargs['name']
+        self._settings['engine'] = kwargs['engine']
+        self._settings['name'] = kwargs['name']
+        if self._settings['engine'] == 'sqlite':
+            self.__connection = sqlite3.connect(self._settings['name'])
+        else:
+            raise Exception("Not Implemented")
+
+    def _execute(self, query):
+        if self._settings['engine']:
+            return self.__connection.execute(query)
+        else:
+            raise Exception("Not Implemented")
 
     def __getattr__(self, name):
         return Table(name)
@@ -356,14 +367,13 @@ class SqlBuilder(object):
         return self
 
     def Join(self, table, join_type, *args):
-        assert isinstance(table, Table), "Join accepts only tables"
+        assert isinstance(table, Table), "Join only accepts tables"
         self.joins.append({
             'table': table,
             'conds': reduce(operator.and_, args) if args else None,
             'type' : join_type,
             })
         return self
-
     def InnerJoin(self, table, *args):
         return self.Join(table, "INNER", *args)
     def LeftJoin(self, table, *args):
@@ -425,5 +435,4 @@ class SqlBuilder(object):
         return res
 
     def FetchFrom(self, db):
-        # TODO
-        pass
+        return db._execute(self.sql(db=db._settings['engine']))

@@ -2,12 +2,25 @@
 
 import sql
 import datetime
+
 from sql import Expr as E, Param as P, Literal as L
 db = sql.Db(engine='sqlite', name=':memory:')
 
-print sql.SqlBuilder().Select().From(db.Users).LeftJoin(
-        db.Profiles, db.Users.profile_id == db.Profiles.id
-        ).RightJoin(db.Departments).Where(db.Users.name == 'Dave').sql(db="sqlite")
+db._execute("""CREATE TABLE Users (
+    id integer NOT NULL PRIMARY KEY,
+    login varchar(35) NOT NULL,
+    last_login_time datetime NOT NULL
+    )""")
+db._execute("""INSERT INTO Users(id, login, last_login_time)
+    VALUES(1, 'joe', '2009-12-24 02:13:11')""")
+db._execute("""INSERT INTO Users(id, login, last_login_time)
+    VALUES(2, 'bill', '2010-03-24 14:13:11')""")
+db._execute("""INSERT INTO Users(id, login, last_login_time)
+    VALUES(3, 'admin', '2011-01-24 22:13:11')""")
+
+rows = sql.SqlBuilder().Select(db.Users.id, db.Users.login).From(db.Users).Where(db.Users.id != 'admin').FetchFrom(db)
+for row in rows:
+    print ",".join([str(r) for r in row])
 
 
 def test_table_field_repr():
@@ -134,3 +147,6 @@ def test_join():
         ).sql(db="sqlite") == "SELECT * FROM Users "\
             "LEFT OUTER JOIN Profiles ON (Users.profile_id = Profiles.id) "\
             "RIGHT OUTER JOIN Departments  WHERE (Users.name = 'Dave')"
+
+def test_fetch():
+    db = sql.Db(engine='sqlite', name=':memory:')
