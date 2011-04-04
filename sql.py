@@ -5,10 +5,7 @@ import operator
 import sqlite3
 
 class Db(object):
-    _settings = {
-        # 'engine': 'sqlite',
-        # 'name': 'somewhere',
-    }
+    _settings = {}
 
     def __init__(self, **kwargs):
         self._settings['engine'] = kwargs['engine']
