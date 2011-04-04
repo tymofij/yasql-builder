@@ -11,9 +11,6 @@ def test_table_field_repr():
     assert repr(db.Users) == "<Table:Users>"
     assert repr(db.aa.bb) == "<Field:aa.bb>"
 
-sql.Literal.default_db = 'sqlite'
-print str(~E(~E((db.a.b > 1) & (db.b.c != 1))))
-
 def test_exprs():
     # monkeypatch Literal to make it work without db provided
     sql.Literal.default_db = 'sqlite'
@@ -57,6 +54,9 @@ def test_exprs():
     # IS NULL and NOT NULL
     assert str( db.a.b == None ) == "(a.b IS NULL)"
     assert str( db.a.b != None ) == "(a.b IS NOT NULL)"
+    # functions:
+    assert str(sql.Max((db.a.b + 1) * db.b.c)) == "MAX((a.b + 1) * b.c)"
+    assert str(~(~(db.a.b > 1))) == "NOT(NOT(a.b > 1))"
     # return it to initial None
     sql.Literal.default_db = None
 

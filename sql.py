@@ -30,6 +30,11 @@ DELETE = 'DELETE'
 
 BINARY_OPERATORS = ('=', '!=', '<', '<=', '>', '>=', 'IN')
 
+Max = lambda expr: expr.apply_func("MAX")
+Min = lambda expr: expr.apply_func("MIN")
+Avg = lambda expr: expr.apply_func("AVG")
+Count = lambda expr: expr.apply_func("COUNT")
+
 class Expr(object):
     def __new__(cls, *args, **kwargs):
         """
