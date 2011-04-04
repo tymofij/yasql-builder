@@ -11,7 +11,6 @@ class Expr(object):
     negative = False
     children = [] # sub-expressions or literals
     operator = AND # what connects them
-    parent = None
 
     def __new__(cls, *args):
         """
@@ -27,7 +26,6 @@ class Expr(object):
                         assert isinstance(c, Expr)
                     obj = object.__new__(cls)
                     obj.children = list(args)
-                    obj.adopt_all()
                     return obj
                 else: # just one Expr object
                     return args[0]
@@ -44,15 +42,6 @@ class Expr(object):
                     child = Literal(child)
                 children.append(child)
             self.children = children
-            self.adopt_all()
-
-    def adopt_all(self):
-        """ assigns self as a parent to all current children.
-        mostly needed on create operations: __new__ and join
-        """
-        for child in self.children:
-            if isinstance(child, (Param, Expr)):
-                child.parent = self
 
     def join(self, other, operator):
         """
@@ -74,16 +63,13 @@ class Expr(object):
                 # if multicond, we merge his kids with ours
                 if other.is_multi():
                     self.children.extend(other.children)
-                    self.adopt_all()
                 # if a leaf, we add it to list of our children
                 else:
-                    other.parent = self
                     self.children.append(other)
                 return self
         else:
             # shallowcopy ourselves into a new object, to be moved downside
             obj = copy.copy(self)
-            obj.parent = self
             # that is brand new me, with new operator and kids
             self.operator = operator
             self.children = [obj, other]
@@ -110,12 +96,21 @@ class Expr(object):
             return "<Expr: %s>" % (" %s " % self.operator).join([
                 repr(child) for child in self.children])
 
-    def __str__(self):
+    def sql(self, **kwargs):
+        def sqlize(obj, **kwargs):
+            if hasattr(obj, 'sql'):
+                return obj.sql(**kwargs)
+            else:
+                return str(obj)
+
         return "%(not)s(%(expr)s)" % {
             'not': 'NOT' if self.negative else '',
             'expr':(" %s " % self.operator).join(
-                        [str(c) for c in self.children])
+                        [sqlize(c, **kwargs) for c in self.children])
             }
+
+    def __str__(self):
+        return self.sql()
 
 class Literal(object):
     """
@@ -127,10 +122,10 @@ class Literal(object):
         self.value = value
 
     def __repr__(self):
-        return "<Literal:%s>" % str(self)
+        return "<Literal:%s>" % self.sql()
 
-    def __str__(self):
-        # FIXME -- actual work must be done here, probably up to the parent
+    def sql(self, **kwargs):
+        # FIXME -- actual work must be done here, according to db type
         if type(self.value) == str:
             return "'%s'" % self.value
         else:
@@ -139,25 +134,16 @@ class Literal(object):
 
 class Param(object):
     """ A parameter that can be passed to Expr and thus to SqlBuilder
-    Looks for 'params' property dict in its parent object, then its parent
-    and so on. Raises exception when parent with given parameter is not found.
     """
     name = ''
-    parent = None
 
-    def __init__(self, name, parent=None):
+    def __init__(self, name):
         self.name = name
-        self.parent = parent
 
-    def __str__(self):
-        parent = self.parent
-        while (not hasattr(parent, 'params')
-                                    or self.name not in parent.params):
-            if parent is None or not hasattr(parent, 'parent'):
-                raise Exception('parent with "%s" in params not found' %
-                    self.name)
-            parent = parent.parent
-        return str(Literal(parent.params[self.name]))
+    def sql(self, **kwargs):
+        if 'params' not in kwargs or self.name not in kwargs['params']:
+            raise Exception('parameter "%s" not found' % self.name)
+        return Literal(kwargs['params'][self.name]).sql(**kwargs)
 
     def __repr__(self):
         return "<Param:%s>" % self.name

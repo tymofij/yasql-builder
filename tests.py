@@ -4,11 +4,6 @@ import sql
 from sql import Expr as E, Param as P
 db = sql.Db()
 
-params = {'a': 'AAA', 'b': 'BBB', 'c': 'CCC', 1:111, 2: 222, 'x': 'XXX' }
-e = E(db.a.b == P(1), db.b.c != P(2)) & E(db.x.y == P('x'))
-e.params = params
-print repr(E(db.a.b == 1, db.b.c != 1).children)
-
 #print repr(db.xx)
 #print repr(db.Users)
 #print repr(db.aa.bb)
@@ -46,18 +41,15 @@ def test_exprs():
         "((a.b = 1) AND (b.c != 1) AND NOT(x.y = 'xx'))"
 
 def test_params():
-    params = {'a': 'AAA', 'b': 'BBB', 'c': 'CCC', 1:111, 2: 222, 'x': 'XXX' }
+    opts = {'params':
+            {'a': 'AAA', 'b': 'BBB', 'c': 'CCC', 1:111, 2: 222, 'x': 'XXX' }
+        }
     # no new node should be created
-    e = E(E('=', db.z.i, P('a')))
-    e.params = params
-    assert str(e) == "(z.i = 'AAA')"
+    assert E(E('=', db.z.i, P('a'))).sql(**opts) == "(z.i = 'AAA')"
     assert repr(P('x')) == "<Param:x>"
     # simple stringification
-    e = E(db.a.b == P('a'), db.b.c != P('b'))
-    e.params = params
-    assert str(e) == "((a.b = 'AAA') AND (b.c != 'BBB'))"
+    assert (E(db.a.b == P('a'), db.b.c != P('b'))).sql(**opts) == \
+        "((a.b = 'AAA') AND (b.c != 'BBB'))"
     # merging in a leaf
-    e = E(db.a.b == P(1), db.b.c != P(2)) & E(db.x.y == P('x'))
-    e.params = params
-    assert str(e) == "((a.b = 111) AND (b.c != 222) AND (x.y = 'XXX'))"
-
+    assert (E(db.a.b == P(1), db.b.c != P(2)) & E(db.x.y == P('x'))
+        ).sql(**opts) == "((a.b = 111) AND (b.c != 222) AND (x.y = 'XXX'))"
