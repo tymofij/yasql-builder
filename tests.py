@@ -90,4 +90,8 @@ def test_builder():
         ) == "SELECT Users.id, Users.login FROM Users " \
              "WHERE ((Users.id = 4) OR (Users.name = 'Joe') " \
              "OR (Users.name = 'Sarah'))"
-
+    assert sql.SqlBuilder().Delete().From(db.Users).sql(db="sqlite") == \
+        "DELETE FROM Users"
+    assert sql.SqlBuilder().Delete().From(db.Users
+        ).Where(db.Users.id == 4).sql(db="sqlite") == \
+        "DELETE FROM Users WHERE (Users.id = 4)"

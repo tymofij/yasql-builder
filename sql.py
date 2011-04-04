@@ -251,12 +251,31 @@ class Field(object):
 
 class SqlBuilder(object):
     """ the query builder """
-    select_fields, from_tables, where_conds = None, None, None
+    query_type = None
+    select_fields, from_tables = None, None
+    where_conds, having_conds = None, None
+    limit = None
     params = []
 
     def Select(self, *args, **kwargs):
+        assert self.query_type is None, \
+            ".Select() can not be called once query type has been set"
+        self.query_type = 'SELECT'
         # TODO: field aliases, tables in the list, to indicate table.*
         self.select_fields = args
+        return self
+
+    def Update(self, **kwargs):
+        assert self.query_type is None, \
+            ".Update() can not be called once query type has been set"
+        self.query_type = 'UPDATE'
+        self.update_fields = kwargs
+        return self
+
+    def Delete(self):
+        assert self.query_type is None, \
+            ".Delete() can not be called once query type has been set"
+        self.query_type = 'DELETE'
         return self
 
     def From(self, *args, **kwargs):
@@ -269,40 +288,52 @@ class SqlBuilder(object):
         return self
 
     def And(self, *args):
-        assert self.where_conds, ".And() can be called only after .Where()"
+        assert self.where_conds or self.having_conds, \
+            ".And() can be called only after .Where() or .Having()"
         self.where_conds = self.where_conds & Expr(*args)
         return self
 
     def Or(self, *args):
-        assert self.where_conds, ".Or() can be called only after .Where()"
+        assert self.where_conds or self.having_conds, \
+            ".Or() can be called only after .Where() or .Having()"
         for arg in args:
             self.where_conds = self.where_conds | Expr(arg)
         return self
 
     def GroupBy(self, *args):
         # TODO
-        pass
+        return self
 
     def Having(self, *args):
         # TODO
-        pass
+        return self
 
     def OrderBy(self, *args):
         # TODO
-        pass
+        return self
 
     def Limit(self, num_rows):
-        # TODO
-        pass
+        self.limit = num_rows
+        return self
 
     def sql(self, db=None):
-        """ Construct sql to be executed """
-        res = "SELECT %(select_fields)s FROM %(from_tables)s" % {
-            'from_tables':
-                ", ".join([str(table) for table in self.from_tables]),
-            'select_fields':
-                ", ".join([str(field) for field in self.select_fields]) or "*"
-        }
+        """ Construct sql to be executed
+        db parameter indicates type of database engine
+        """
+        assert self.from_tables, "From() clause is required."
+        if self.query_type == 'SELECT':
+            res = "SELECT %s" % (", ".join(
+                [str(field) for field in self.select_fields]) or "*")
+        elif self.query_type == 'DELETE':
+            res = "DELETE"
+        elif self.query_type == 'UPDATE':
+            res = "UPDATE %s" % ", ".join(
+                ["%s = %s " % (str(field), expr.sql(params=self.params, db=db))
+                    for (field, expr) in self.update_fields ])
+        else:
+            raise Exception("Unknown query type")
+        res += " FROM %s" % ", ".join(
+            [str(table) for table in self.from_tables])
         if self.where_conds:
             res +=" WHERE %s" % self.where_conds.sql(params=self.params, db=db)
         return res
