@@ -109,8 +109,7 @@ class Expr(object):
                         [sqlize(c, **kwargs) for c in self.children])
             }
 
-    def __str__(self):
-        return self.sql()
+    __str__ = sql
 
 class Literal(object):
     """
