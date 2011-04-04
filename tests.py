@@ -6,11 +6,6 @@ import datetime
 from sql import Expr as E, Param as P, Literal as L
 db = sql.Db(engine='sqlite', name=':memory:')
 
-sql.Literal.default_db = 'sqlite'
-# no new node should be created
-print str( db.a.b._in_((1,2,3)) )
-
-
 def test_table_field_repr():
     assert repr(db.xx) == "<Table:xx>"
     assert repr(db.Users) == "<Table:Users>"
@@ -19,6 +14,7 @@ def test_table_field_repr():
 def test_exprs():
     # monkeypatch Literal to make it work without db provided
     sql.Literal.default_db = 'sqlite'
+
     # no new node should be created
     assert str(E(E(db.z.i, 1, operator='='))) == "(z.i = 1)"
     # representation of simple ones
@@ -51,6 +47,10 @@ def test_exprs():
     # check IN
     assert str( db.a.b._in_((1,2,3)) ) == "(a.b IN (1, 2, 3))"
     assert str( E(db.a.b)._in_((1,2,3)) ) == "(a.b IN (1, 2, 3))"
+    # check triple ones
+    assert str( E(db.a.b) + 4 + 7 > 20 ) == "((a.b + 4 + 7) > 20)"
+    assert str( db.a.b + 4 + 7 > 20 ) == "((a.b + 4 + 7) > 20)"
+
     # return it to initial None
     sql.Literal.default_db = None
 
