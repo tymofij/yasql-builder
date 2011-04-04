@@ -44,10 +44,16 @@ DELETE = 'DELETE'
 
 BINARY_OPS = ('=', '!=', '<', '<=', '>', '>=', 'IN')
 
-Max = lambda expr: expr.apply_func("MAX")
-Min = lambda expr: expr.apply_func("MIN")
-Avg = lambda expr: expr.apply_func("AVG")
-Count = lambda expr: expr.apply_func("COUNT")
+Max = lambda obj: Expr(obj).apply_func("MAX")
+Min = lambda obj: Expr(obj).apply_func("MIN")
+Avg = lambda obj: Expr(obj).apply_func("AVG")
+Sum = lambda obj: Expr(obj).apply_func("AVG")
+First = lambda obj: Expr(obj).apply_func("FIRST")
+Last = lambda obj: Expr(obj).apply_func("LAST")
+
+def Count(obj=None):
+    expr = Expr(obj) if obj else Expr()
+    return expr.apply_func("COUNT")
 
 class Expr(object):
     def __new__(cls, *args, **kwargs):
@@ -110,6 +116,7 @@ class Expr(object):
             # shallowcopy ourselves into a new object, to be moved downside
             obj = copy.copy(self)
             # that is brand new me, with new operator and kids
+            self.func = ''
             self.operator = operator
             self.children = [obj, other]
             return self
@@ -171,8 +178,12 @@ class Expr(object):
             else:
                 return str(obj)
         if self.operator is None:
-            assert len(self.children) == 1, "No operator for multichild Expr"
-            res = sqlize(self.children[0], **kwargs)
+            assert len(self.children) <= 1 or self.func, \
+                "Only function calls to * or literal can go without operator"
+            if self.children:
+                res = sqlize(self.children[0], **kwargs)
+            else:
+                res = "*"
             if self.func:
                 res = "%s(%s)" % (self.func, res)
             return res
@@ -327,7 +338,7 @@ class SqlBuilder(object):
     def __init__(self):
         self.query_type = None
         self.select_fields, self.from_tables, = None, None
-        self.set_fields = None
+        self.set_fields, self.group_fields = None, None
         self.where_conds, self.having_conds = None, None
         self.joins = []
         self.limit = None
@@ -376,13 +387,19 @@ class SqlBuilder(object):
     def And(self, *args):
         assert self.where_conds or self.having_conds, \
             ".And() can be called only after .Where() or .Having()"
-        self.where_conds &= reduce(operator.and_, args)
+        if not self.having_conds:
+            self.where_conds &= reduce(operator.and_, args)
+        else:
+            self.having_conds &= reduce(operator.and_, args)
         return self
 
     def Or(self, *args):
         assert self.where_conds or self.having_conds, \
             ".Or() can be called only after .Where() or .Having()"
-        self.where_conds |= reduce(operator.or_, args)
+        if not self.having_conds:
+            self.where_conds |= reduce(operator.or_, args)
+        else:
+            self.having_conds |= reduce(operator.or_, args)
         return self
 
     def Join(self, table, join_type, *args):
@@ -403,15 +420,16 @@ class SqlBuilder(object):
         return self.Join(table, "FULL OUTER", *args)
 
     def GroupBy(self, *args):
-        # TODO
+        self.group_fields = args
         return self
 
     def Having(self, *args):
-        # TODO
+        assert self.group_fields, "Having can only be used after GroupBy"
+        self.having_conds = reduce(operator.and_, args)
         return self
 
     def OrderBy(self, *args):
-        # TODO
+        self.order_fields = args
         return self
 
     def Limit(self, num_rows):
@@ -422,12 +440,13 @@ class SqlBuilder(object):
         """ Construct sql to be executed
         db parameter indicates type of database engine
         """
+        opts = {'params': self.params, 'db': db}
         if self.query_type == UPDATE:
             assert self.set_fields, "No field setting rules issued, use Set()"
             res = "UPDATE %s SET %s" % (
                 self.update_table,
                 ", ".join(["%s = %s " %
-                    (str(field), expr.sql(params=self.params, db=db))
+                    (str(field), expr.sql(**opts))
                                     for (field, expr) in self.set_fields ]),
                 )
         elif self.query_type == SELECT:
@@ -445,12 +464,20 @@ class SqlBuilder(object):
             for j in self.joins:
                 res += " %(type)s JOIN %(table)s " % j
                 if j['conds']:
-                    res += "ON %s" % j['conds'].sql(params=self.params, db=db)
+                    res += "ON %s" % j['conds'].sql(**opts)
 
         if self.where_conds:
-            res +=" WHERE %s" % self.where_conds.sql(params=self.params, db=db)
+            res +=" WHERE %s" % self.where_conds.sql(**opts)
+
+        if self.query_type == SELECT:
+            if self.group_fields:
+                res += " GROUP_BY %s" % (", ".join(
+                    [str(field) for field in self.group_fields]))
+            if self.having_conds:
+                res +=" HAVING %s" % self.having_conds.sql(**opts)
+
         if self.limit:
-            res +="LIMIT %s" % self.limit
+            res +=" LIMIT %s" % self.limit
         return res
 
     def FetchFrom(self, db):

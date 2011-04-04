@@ -11,8 +11,9 @@ def test_table_field_repr():
     assert repr(db.Users) == "<Table:Users>"
     assert repr(db.aa.bb) == "<Field:aa.bb>"
 
-sql.Literal.default_db = 'sqlite'
-print str( (db.a.b > 47 ) > 4 )
+print sql.SqlBuilder().Select(sql.Count()).From(db.Users).Where(db.Users.id > 12
+        ).GroupBy(db.Users.name).Having(sql.Count() > 4).OrderBy(db.Users.name).Limit(5).sql(db="sqlite")
+
 
 def test_exprs():
     # monkeypatch Literal to make it work without db provided
@@ -62,6 +63,8 @@ def test_exprs():
     # functions:
     assert str(sql.Max((db.a.b + 1) * db.b.c)) == "MAX((a.b + 1) * b.c)"
     assert str(~(~(db.a.b > 1))) == "NOT(NOT(a.b > 1))"
+    assert str(sql.Avg(db.Users.age) > 4) == "(AVG(Users.age) > 4)"
+    assert str(sql.Count() > 4) == "(COUNT(*) > 4)"
     # return it to initial None
     sql.Literal.default_db = None
 
@@ -121,6 +124,13 @@ def test_select():
         ) == "SELECT Users.id, Users.login FROM Users " \
              "WHERE ((Users.id = 4) OR ((Users.name = 'Joe') " \
              "OR (Users.name = 'Sarah')))"
+    assert sql.SqlBuilder().Select(sql.Count()).From(db.Users
+        ).Where(db.Users.id > 12
+        ).GroupBy(db.Users.name
+        ).Having(sql.Count() > 4
+        ).OrderBy(db.Users.name).Limit(5).sql(db="sqlite") == \
+            "SELECT COUNT(*) FROM Users WHERE (Users.id > 12) "\
+            "GROUP_BY Users.name HAVING (COUNT(*) > 4) LIMIT 5"
 
 def test_delete():
     assert sql.SqlBuilder().Delete().From(db.Users).sql(db="sqlite") == \
