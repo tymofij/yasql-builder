@@ -5,8 +5,11 @@ import datetime
 from sql import Expr as E, Param as P, Literal as L
 db = sql.Db(engine='sqlite', name=':memory:')
 
-sql.Literal.default_db = 'sqlite'
-print str((db.a.b + 1) > 4)
+q = sql.SqlBuilder().Update(db.a).Set(
+    (db.a.b, db.a.c + 4),(db.d.c, db.e.f * 8), simple_field = P('x')
+    ).Where(db.g.h == P('h'))
+q.params = {'x': 'XY', 'h': 'HH'}
+print q.sql(db="sqlite")
 
 def test_table_field_repr():
     assert repr(db.xx) == "<Table:xx>"
@@ -104,10 +107,19 @@ def test_select():
         ) == "SELECT Users.id, Users.login FROM Users " \
              "WHERE ((Users.id = 4) OR ((Users.name = 'Joe') " \
              "OR (Users.name = 'Sarah')))"
-             
+
 def test_delete():
     assert sql.SqlBuilder().Delete().From(db.Users).sql(db="sqlite") == \
         "DELETE FROM Users"
     assert sql.SqlBuilder().Delete().From(db.Users
         ).Where(db.Users.id == 4).sql(db="sqlite") == \
         "DELETE FROM Users WHERE (Users.id = 4)"
+
+def test_update():
+    q = sql.SqlBuilder().Update(db.a).Set(
+        (db.a.b, db.a.c + 4),(db.d.c, db.e.f * 8), simple_field = P('x')
+        ).Where(db.g.h == P('h'))
+    q.params = {'x': 'XY', 'h': 'HH'}
+    assert q.sql(db="sqlite") == \
+        "UPDATE a SET a.b = (a.c + 4) , d.c = (e.f * 8) , simple_field = 'XY'"\
+        "  WHERE (g.h = 'HH')"

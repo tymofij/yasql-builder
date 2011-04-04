@@ -312,6 +312,7 @@ class SqlBuilder(object):
         assert self.query_type is None, \
             ".Update() can not be called once query type has been set"
         self.query_type = UPDATE
+        assert isinstance(update_table, Table), "Update accepts only tables"
         self.update_table = update_table
         return self
 
