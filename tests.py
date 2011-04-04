@@ -177,6 +177,11 @@ def test_join():
             "LEFT OUTER JOIN Profiles ON (Users.profile_id = Profiles.id) "\
             "RIGHT OUTER JOIN Departments  WHERE (Users.name = 'Dave')"
 
+    assert sql.SqlBuilder().Select().From(db.Users).LeftJoin(
+        (db.Profiles, 'P'), db.Users.profile_id == db.P.id
+        ).sql(db="sqlite") == "SELECT * FROM Users "\
+            "LEFT OUTER JOIN Profiles P ON (Users.profile_id = P.id)"
+
 def test_fetch():
     db = sql.Db(engine='sqlite', name=':memory:')
     db._execute("""CREATE TABLE Users (

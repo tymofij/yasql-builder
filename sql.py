@@ -352,8 +352,8 @@ class SqlBuilder(object):
         self.select_fields = []
         self.from_tables = []
         self.where_conds = []
-        self.group_fields = []
         self.having_conds = []
+        self.group_fields = []
         self.set_fields = []
         self.joins = []
         self.limit = None
@@ -427,9 +427,8 @@ class SqlBuilder(object):
         return self
 
     def Join(self, table, join_type, *args):
-        assert isinstance(table, Table), "Join only accepts tables"
         self.joins.append({
-            'table': table,
+            'table': table if isinstance(table, Table) else "%s %s" % table,
             'conds': reduce(operator.and_, args) if args else None,
             'type' : join_type,
             })
