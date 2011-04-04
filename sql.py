@@ -151,9 +151,15 @@ class Expr(object):
                 res = "NOT(%s)" % res
             return res
         else:
+            # special case of IS NONE
+            if self.operator in ('=', '!=') and len(self.children) == 2 \
+                and sqlize(self.children[1], **kwargs) == 'NULL':
+                operator = 'IS' if self.operator == '=' else 'IS NOT'
+            else:
+                operator = self.operator
             return "%(not)s(%(expr)s)" % {
                 'not': 'NOT' if self.negative else '',
-                'expr':(" %s " % self.operator).join(
+                'expr':(" %s " % operator).join(
                             [sqlize(c, **kwargs) for c in self.children])
                 }
 

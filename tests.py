@@ -50,7 +50,9 @@ def test_exprs():
     # check triple ones
     assert str( E(db.a.b) + 4 + 7 > 20 ) == "((a.b + 4 + 7) > 20)"
     assert str( db.a.b + 4 + 7 > 20 ) == "((a.b + 4 + 7) > 20)"
-
+    # IS NULL and NOT NULL
+    assert str( db.a.b == None ) == "(a.b IS NULL)"
+    assert str( db.a.b != None ) == "(a.b IS NOT NULL)"
     # return it to initial None
     sql.Literal.default_db = None
 
