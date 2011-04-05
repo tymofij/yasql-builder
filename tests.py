@@ -61,6 +61,7 @@ def test_exprs():
     assert str(~(~(db.a.b > 1))) == "NOT(NOT(a.b > 1))"
     assert str(sql.Avg(db.Users.age) > 4) == "(AVG(Users.age) > 4)"
     assert str(sql.Count() > 4) == "(COUNT(*) > 4)"
+    
     # return it to initial None
     sql.Literal.default_db = None
 

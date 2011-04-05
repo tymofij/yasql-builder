@@ -1,3 +1,53 @@
+"""
+This module provides utility functions for constructing SQL queries for some
+database. Currently only SELECT, UPDATE and DELETE are implemented.
+
+Sample usage:
+~~~~~~~~~~~~
+# connecting to database
+db = sql.Db(engine='sqlite', name='/home/joe/file')
+
+# constructing the query
+    query = sql.SqlBuilder(
+        ).Select(db.u.id, (db.u.login, 'lgn') # a field alias for the user.login
+        ).From((db.Users, 'u') # a table alias
+        ).Where(Alias('lgn') != 'admin' # alias used
+        ).And(db.u.last_login_time < Param('since'))
+
+# providing the query with parameters to substitute:
+# that allows us to run the same query several times with different parameters
+query.params = {'since': datetime.date(year=2010, month=1, day=1)}
+
+# actual execution
+rows = query.FetchFrom(db)
+
+# each row returned is not just a tuple but an object that tries to map
+# its properties to table fields
+row = rows.next()
+
+# so, not only
+# row[1] returns 'joe'
+# but also row.login and row.users__login (double underscore)
+# and row.lgn (by alias)
+
+Literal data and Parameters like strings, number, dates, sequences
+are escaped in db-specific fashion to avoid SQL injection attacks.
+
+Constructing complex expression with Expr class (implicitly used for Where above)
+ia also possible, including different SQL function, allowing constructs like:
+.Select((sql.Count(),'X')) => SELECT COUNT(*) AS X
+sql.Max((db.a.b + 1) * db.b.c)) => MAX((a.b + 1) * b.c)
+
+Also it possible to use expressions when assigning values in UPDATE, like
+Set((db.a.b, db.a.c + 4)) => SET a.b = (a.c + 4)
+
+Known limitations:
+~~~~~~~~~~~~~~~~~
+Tables of declared fields are not checked for presence in from or join clauses.
+Also Aliases are not checked to be previously declared.
+LIKE and few other SQL lookups are not implemented.
+"""
+
 import copy
 import datetime
 from types import NoneType
@@ -34,7 +84,7 @@ class Db(object):
 class Table(object):
     """
     Used in constructing SQL and also returns Fields as its properties.
-    Is not checked for presence in database.
+    Not checked for presence in database.
     """
     def __init__(self, name):
         # to avoid confusion with pretty common field 'name'
@@ -47,7 +97,7 @@ class Table(object):
         return self.__name
 
     def __getattr__(self, name):
-        """Return Fields with given name."""
+        """Return Field with given name."""
         return Field(self, name)
 
 UPDATE = 'UPDATE'
@@ -56,6 +106,7 @@ DELETE = 'DELETE'
 
 BINARY_OPS = ('=', '!=', '<', '<=', '>', '>=', 'IN')
 
+# those return expression with function applied
 Max = lambda obj: Expr(obj).apply_func("MAX")
 Min = lambda obj: Expr(obj).apply_func("MIN")
 Avg = lambda obj: Expr(obj).apply_func("AVG")
@@ -64,6 +115,7 @@ First = lambda obj: Expr(obj).apply_func("FIRST")
 Last = lambda obj: Expr(obj).apply_func("LAST")
 
 def Count(obj=None):
+    """Return Expr with applied function COUNT."""
     expr = Expr(obj) if obj else Expr()
     return expr.apply_func("COUNT")
 
@@ -91,7 +143,7 @@ class Expr(object):
     """
     def __new__(cls, *args, **kwargs):
         """
-        Creat new Expr object or return existing,
+        Create new Expr object or return existing,
         if called with single parameter of type Expr.
         """
         if len(args) == 1 and isinstance(args[0], Expr):
@@ -121,13 +173,15 @@ class Expr(object):
 
     def join(self, other, operator):
         """
-        Joins this Expression with other one.
+        Joins this Expression with other one. Return Expr, self or new.
 
         If current is a leaf object, then it is moved downwards as first child
         and other one is added as second child
 
         Also that is performed when they are of different types,
-        or has functions on them
+        or has functions on them.
+        Otherwise it tries to adopt right one as a child,
+        to avoid extra brackets
         """
         if not isinstance(other, Expr):
             other = Expr(other)
@@ -162,7 +216,7 @@ class Expr(object):
 
     def apply_func(self, func):
         """
-        Apply given SQL function to children.
+        Apply given SQL function to children. Return Expr, self or new.
         If this node already have a function, then it is shifted downward,
         and new one with needed function is added in its place
         """
@@ -214,7 +268,7 @@ class Expr(object):
 
     def sql(self, **kwargs):
         """
-        Generate SQL for this query.
+        Generate SQL for this query. Return string.
         Accepts anything and passes it down the rendering stack,
         let the children pick what they need.
         Namely, Param needs params dict, Literal needs db string (engine type)
@@ -290,7 +344,7 @@ class Overloaded(object):
 class Literal(Overloaded):
     """
     Represents object of a simple type passed to the query.
-    .sql() does the transformation according to database conventions
+    .sql() does the transformation according to database conventions.
     """
     # good for testing, but in general case should be unnecessary
     default_db = None
@@ -302,14 +356,14 @@ class Literal(Overloaded):
         return "<Literal:%s>" % self.sql()
 
     def bool_converter(value, db):
-        """Convert boolean value for use in database."""
+        """Convert boolean value for use in database. Return string."""
         if db in ('postgres', 'rdbhost'):
             return "'t'" if value else "'f'"
         else:
             return '1' if value else '0'
 
     def string_converter(value, db):
-        """Convert string value for use in database."""
+        """Convert string value for use in database. Return string."""
         replaces = [
             ("'", "''"),
             ('\\', '\\\\'),
@@ -353,7 +407,7 @@ class Literal(Overloaded):
 
     def sql(self, **kwargs):
         """Convert self.value to its string representation,
-        fit for passing to database.
+        fit for passing to database. Return string.
         """
         db = kwargs.get('db', self.default_db)
         if not db:
@@ -371,7 +425,7 @@ class Literal(Overloaded):
 
 class Param(Overloaded):
     """
-     A parameter that can be passed to Expr and thus to SqlBuilder
+     A parameter that can be passed to Expr and thus to SqlBuilder.
     """
     def __init__(self, name):
         self.name = name
@@ -379,7 +433,7 @@ class Param(Overloaded):
     def sql(self, **kwargs):
         """
         Substitute the parameter with value in passed params,
-        then get SQL representation with Literal's help.
+        then get SQL representation with Literal's help. Return string.
         """
         if 'params' not in kwargs or self.name not in kwargs['params']:
             raise Exception('parameter "%s" not found' % self.name)
@@ -458,7 +512,8 @@ class SqlBuilder(object):
 
     def Select(self, *args):
         """
-        Fill fields which are to be selected.
+        Fill fields which are to be selected. Return SqlBuilder.
+
         Each parameter is either a field or a tuple of (Field, alias).
         Latter ones will be represented in SQL as "field as alias"
         Alias is a string, it is not escaped because is meant to be used as-is.
@@ -477,7 +532,7 @@ class SqlBuilder(object):
         return self
 
     def Update(self, update_table):
-        """Fill in the name of the table to be updated."""
+        """Fill in the name of the table to be updated.  Return SqlBuilder."""
         assert self.query_type is None, \
             ".Update() can not be called once query type has been set"
         assert isinstance(update_table, Table), "Update accepts only tables"
@@ -488,6 +543,8 @@ class SqlBuilder(object):
     def Set(self, *args, **kwargs):
         """
         Fill in the list of fields to be updated and their respective Exprs.
+        Return SqlBuilder.
+
         Parameters:
             Ordered : tuples of (Field, Expr).
             Keywords: alias=Expr, where alias is a string.
@@ -500,7 +557,7 @@ class SqlBuilder(object):
 
     def Delete(self):
         """
-        Sets the query type to DELETE
+        Sets the query type to DELETE. Return SqlBuilder.
         """
         assert self.query_type is None, \
             ".Delete() can not be called once query type has been set"
@@ -509,7 +566,7 @@ class SqlBuilder(object):
 
     def From(self, *args):
         """
-        Fill in the list of tables in WHERE clause.
+        Fill in the list of tables in WHERE clause. Return SqlBuilder.
 
         Parameters are Tables or tuples of (Table, alias)
         where alias is a string
@@ -525,8 +582,9 @@ class SqlBuilder(object):
 
     def Where(self, *args):
         """
-        Fill in the WHERE clause with conditions.
-        They are expected to be of Expr type and are ANDed together
+        Fill in the WHERE clause with conditions. Return SqlBuilder.
+
+        Conditions are expected to be of Expr type and are ANDed together.
         """
         self.where_conds = reduce(operator.and_, args)
         return self
@@ -534,7 +592,8 @@ class SqlBuilder(object):
     def And(self, *args):
         """
         Add one or more AND condition to WHERE or HAVING clause,
-        whichever is last
+        whichever is last.  Return SqlBuilder.
+
         If several Exprs passed, they are ANDed together
         and than ANDed to the right of current WHERE or HAVING
         """
@@ -549,7 +608,8 @@ class SqlBuilder(object):
     def Or(self, *args):
         """
         Add one or more OR condition to WHERE or HAVING clause,
-        whichever is last
+        whichever is last.  Return SqlBuilder.
+
         If several Exprs passed, they are ORed together
         and than ORed to the right of current WHERE or HAVING
         """
@@ -578,7 +638,7 @@ class SqlBuilder(object):
         return self
     def InnerJoin(self, table, *args):
         """
-        Construct INNER JOIN.
+        Construct INNER JOIN. Return SqlBuilder.
 
         table is either a Table or a tuple of (Table, alias)
         Rest of parameters are join conditions. They are ANDed together.
@@ -586,7 +646,7 @@ class SqlBuilder(object):
         return self.Join(table, "INNER", *args)
     def LeftJoin(self, table, *args):
         """
-        Construct LEFT OUTER JOIN.
+        Construct LEFT OUTER JOIN. Return SqlBuilder.
 
         table is either a Table or a tuple of (Table, alias)
         Rest of parameters are join conditions. They are ANDed together.
@@ -594,7 +654,7 @@ class SqlBuilder(object):
         return self.Join(table, "LEFT OUTER", *args)
     def RightJoin(self, table, *args):
         """
-        Construct RIGHT OUTER JOIN.
+        Construct RIGHT OUTER JOIN. Return SqlBuilder.
 
         table is either a Table or a tuple of (Table, alias)
         Rest of parameters are join conditions. They are ANDed together.
@@ -602,7 +662,7 @@ class SqlBuilder(object):
         return self.Join(table, "RIGHT OUTER", *args)
     def OuterJoin(self, table, *args):
         """
-        Construct OUTER JOIN.
+        Construct OUTER JOIN. Return SqlBuilder.
 
         table is either a Table or a tuple of (Table, alias)
         Rest of parameters are join conditions. They are ANDed together.
@@ -610,29 +670,41 @@ class SqlBuilder(object):
         return self.Join(table, "FULL OUTER", *args)
 
     def GroupBy(self, *args):
-        """Construct GROUP BY clause. Parameters are Fields and Aliases."""
+        """Construct GROUP BY clause.  Return SqlBuilder.
+
+        Parameters are Fields and Aliases.
+        """
         self.group_fields = args
         return self
 
     def Having(self, *args):
-        """Construct HAVING clause. Parameters are Exprs."""
+        """Construct HAVING clause. Return SqlBuilder.
+
+        Parameters are Exprs.
+        """
         assert self.group_fields, "Having can only be used after GroupBy"
         self.having_conds = reduce(operator.and_, args)
         return self
 
     def OrderBy(self, *args):
-        """Construct ORDER BY clause. Parameters are Fields and Aliases."""
+        """Construct ORDER BY clause. Return SqlBuilder.
+
+        Parameters are Fields and Aliases.
+        """
         self.order_fields = args
         return self
 
     def Limit(self, num_rows):
-        """Sets LIMIT BY clause. Parameter is a number"""
+        """Sets LIMIT BY clause. Return SqlBuilder.
+
+        Parameter is a number
+        """
         self.limit = num_rows
         return self
 
     def sql(self, db=None):
-        """Construct sql to be executed
-        db parameter indicates type of database engine
+        """Construct sql to be executed. Return string.
+        db parameter indicates type of database engine.
         """
         opts = {'params': self.params, 'db': db}
         if self.query_type == UPDATE:
@@ -688,7 +760,7 @@ class SqlBuilder(object):
         return res
 
     def FetchFrom(self, db):
-        """Actually execute the query.
+        """Actually execute the query. Return None or ResultIterator for SELECT
         For SELECTs return ResultIterator for easy field retrieval
         """
         res = db._execute(self.sql(db=db._settings['engine']))
@@ -734,6 +806,7 @@ class ResultIterator(object):
         """Indicate object as iterable"""
         return self
 
+
 class RowWrapper(object):
     """
     A wrapper over cursor row returned from database.
@@ -760,7 +833,6 @@ class RowWrapper(object):
             return self.values[self.long_fields.index(attr)]
         if attr in self.alias_fields:
             return self.values[self.alias_fields.index(attr)]
-
 
     # this here to provide user with methods available in original value tuple
     def __repr__(self):
