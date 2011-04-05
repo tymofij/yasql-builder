@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 
+# run with nosetest
+
 import sql
 import datetime
-
 from sql import Expr as E, Param as P, Literal as L, Alias as A
+
+# we need to initialize it to get access to Table generation
 db = sql.Db(engine='sqlite', name=':memory:')
 
 def test_table_field_repr():
@@ -61,7 +64,7 @@ def test_exprs():
     assert str(~(~(db.a.b > 1))) == "NOT(NOT(a.b > 1))"
     assert str(sql.Avg(db.Users.age) > 4) == "(AVG(Users.age) > 4)"
     assert str(sql.Count() > 4) == "(COUNT(*) > 4)"
-    
+
     # return it to initial None
     sql.Literal.default_db = None
 
