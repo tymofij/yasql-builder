@@ -9,10 +9,10 @@ db = sql.Db(engine='sqlite', name='/home/joe/file')
 
 # constructing the query
     query = sql.SqlBuilder(
-        ).Select(db.u.id, (db.u.login, 'lgn') # a field alias for the user.login
-        ).From((db.Users, 'u') # a table alias
-        ).Where(Alias('lgn') != 'admin' # alias used
-        ).And(db.u.last_login_time < Param('since'))
+       ).Select(db.u.id, (db.u.login, 'lgn') # a field alias for the user.login
+       ).From((db.Users, 'u') # a table alias
+       ).Where(Alias('lgn') != 'admin' # alias used
+       ).And(db.u.last_login_time < Param('since'))
 
 # providing the query with parameters to substitute:
 # that allows us to run the same query several times with different parameters
@@ -33,8 +33,10 @@ row = rows.next()
 Literal data and Parameters like strings, number, dates, sequences
 are escaped in db-specific fashion to avoid SQL injection attacks.
 
-Constructing complex expression with Expr class (implicitly used for Where above)
-ia also possible, including different SQL function, allowing constructs like:
+Constructing complex expression with Expr class (implicitly used for Where
+above) ia also possible, including different SQL function, allowing constructs
+like:
+
 .Select((sql.Count(),'X')) => SELECT COUNT(*) AS X
 sql.Max((db.a.b + 1) * db.b.c)) => MAX((a.b + 1) * b.c)
 
@@ -46,6 +48,11 @@ Known limitations:
 Tables of declared fields are not checked for presence in from or join clauses.
 Also Aliases are not checked to be previously declared.
 LIKE and few other SQL lookups are not implemented.
+Only sqlite Db connection/execution is implemented, while escaping is provided
+    for multiple database backends.
+No column type checking in Expressions.
+No checking for logical/non-logical expressions:
+    first ones are more appropriate in WHERE, second are in SET.
 """
 
 import copy
