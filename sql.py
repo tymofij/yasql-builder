@@ -62,6 +62,7 @@ import operator
 from collections import Iterable
 import sqlite3
 
+
 class Db(object):
     """
     Provides Db connection. Returns Tables as its properties.
@@ -87,6 +88,7 @@ class Db(object):
     def __getattr__(self, name):
         """Return Table with given name."""
         return Table(name)
+
 
 class Table(object):
     """
@@ -121,10 +123,12 @@ Sum = lambda obj: Expr(obj).apply_func("AVG")
 First = lambda obj: Expr(obj).apply_func("FIRST")
 Last = lambda obj: Expr(obj).apply_func("LAST")
 
+
 def Count(obj=None):
     """Return Expr with applied function COUNT."""
     expr = Expr(obj) if obj else Expr()
     return expr.apply_func("COUNT")
+
 
 class Expr(object):
     """
@@ -157,9 +161,9 @@ class Expr(object):
             return args[0]
         # default object
         obj = object.__new__(cls)
-        obj.func = '' # there can be a function to be applied to the result
-        obj.children = [] # sub-expressions or literals
-        obj.operator = None # what connects them
+        obj.func = ''  # there can be a function to be applied to the result
+        obj.children = []  # sub-expressions or literals
+        obj.operator = None  # what connects them
         return obj
 
     def __init__(self, *args, **kwargs):
@@ -198,9 +202,8 @@ class Expr(object):
                 # other is either multicond of the same operation type,
                 # no functional call neither on us nor on him
                 and (other.operator == operator and not other.func
-                    # or is a leaf:
-                    or not other.is_multi())
-                ):
+                     # or is a leaf:
+                     or not other.is_multi())):
                 # if multicond, we merge his kids with ours
                 if other.is_multi():
                     self.children.extend(other.children)
@@ -238,36 +241,49 @@ class Expr(object):
 
     def __or__(self, other):
         return self.join(other, "OR")
+
     def __and__(self, other):
         return self.join(other, "AND")
+
     def __invert__(self):
         return self.apply_func("NOT")
+
     def __eq__(self, other):
         return self.join(other, '=')
+
     def __ne__(self, other):
         return self.join(other, '!=')
+
     def __lt__(self, other):
         return self.join(other, '<')
+
     def __le__(self, other):
         return self.join(other, '<=')
+
     def __gt__(self, other):
         return self.join(other, '>')
+
     def __ge__(self, other):
         return self.join(other, '>=')
+
     def __add__(self, other):
         return self.join(other, '+')
+
     def __sub__(self, other):
         return self.join(other, '-')
+
     def __mul__(self, other):
         return self.join(other, '*')
+
     def __div__(self, other):
         return self.join(other, '/')
+
     def _in_(self, other):
         return self.join(other, 'IN')
 
     def __repr__(self):
         """Represent this Expr using short notation and children's repr."""
-        if self.is_multi(): # nested condition
+        if self.is_multi():  # nested condition
             return ("<Expr: %s>" % self.operator)
         else:
             return "<Expr: %s>" % (" %s " % self.operator).join([
@@ -293,7 +309,7 @@ class Expr(object):
         # That indicates that this is a leaf, or even special leaf *
         if self.operator is None:
             assert len(self.children) <= 1 or self.func, \
-               "Only function calls on * or Literal can go without an operator"
+                "Only function calls on * or Literal can omit operator"
             if self.children:
                 # that's the only child
                 res = sqlize(self.children[0], **kwargs)
@@ -306,14 +322,14 @@ class Expr(object):
         else:
             # special handling of IS NULL and IS NOT NULL cases
             if self.operator in ('=', '!=') and len(self.children) == 2 \
-                and sqlize(self.children[1], **kwargs) == 'NULL':
+                    and sqlize(self.children[1], **kwargs) == 'NULL':
                 operator = 'IS' if self.operator == '=' else 'IS NOT'
             else:
                 operator = self.operator
             return "%(func)s(%(expr)s)" % {
                 'func': self.func,
-                'expr':(" %s " % operator).join(
-                            [sqlize(c, **kwargs) for c in self.children])
+                'expr': (" %s " % operator).join(
+                    [sqlize(c, **kwargs) for c in self.children])
                 }
     # str() is not really used in SqlBuilder, but it is handy for testing
     __str__ = sql
@@ -326,24 +342,34 @@ class Overloaded(object):
     """
     def __eq__(self, other):
         return Expr(self, other, operator='=')
+
     def __ne__(self, other):
         return Expr(self, other, operator='!=')
+
     def __lt__(self, other):
         return Expr(self, other, operator='<')
+
     def __le__(self, other):
         return Expr(self, other, operator='<=')
+
     def __gt__(self, other):
         return Expr(self, other, operator='>')
+
     def __ge__(self, other):
         return Expr(self, other, operator='>=')
+
     def __add__(self, other):
         return Expr(self, other, operator='+')
+
     def __sub__(self, other):
         return Expr(self, other, operator='-')
+
     def __mul__(self, other):
         return Expr(self, other, operator='*')
+
     def __div__(self, other):
         return Expr(self, other, operator='/')
+
     def _in_(self, other):
         return Expr(self, other, operator='IN')
 
@@ -430,6 +456,7 @@ class Literal(Overloaded):
             else:
                 raise Exception("No converter for %s" % type(self.value))
 
+
 class Param(Overloaded):
     """
      A parameter that can be passed to Expr and thus to SqlBuilder.
@@ -448,6 +475,7 @@ class Param(Overloaded):
 
     def __repr__(self):
         return "<Param:%s>" % self.name
+
 
 class Alias(Overloaded):
     """
@@ -501,7 +529,7 @@ class SqlBuilder(object):
     FROM clauses the query will still be executed.
 
     Query is evaluated when you issue .FetchRows(db)
-        where db is open database connection of type Db()
+    where db is open database connection of type Db()
     """
 
     def __init__(self):
@@ -534,7 +562,7 @@ class SqlBuilder(object):
             # we accept tuples and lists here, which are surely Iterable
             # if somebody passes Iterable without __getitem__ he will get excp
             elif isinstance(arg, Iterable) \
-                and isinstance(arg[0], (Field, Expr)):
+                    and isinstance(arg[0], (Field, Expr)):
                 self.select_fields.append(arg[:2])
         return self
 
@@ -559,7 +587,7 @@ class SqlBuilder(object):
         assert self.query_type == UPDATE, \
             ".Set() is only available for Update() queries"
         self.set_fields = [(field, Expr(expr)) for (field, expr)
-                in (list(args) + list(kwargs.items()))]
+                           in (list(args) + list(kwargs.items()))]
         return self
 
     def Delete(self):
@@ -640,9 +668,10 @@ class SqlBuilder(object):
         self.joins.append({
             'table': table if isinstance(table, Table) else "%s %s" % table,
             'conds': reduce(operator.and_, args) if args else None,
-            'type' : join_type,
+            'type': join_type,
             })
         return self
+
     def InnerJoin(self, table, *args):
         """
         Construct INNER JOIN. Return SqlBuilder.
@@ -651,6 +680,7 @@ class SqlBuilder(object):
         Rest of parameters are join conditions. They are ANDed together.
         """
         return self.Join(table, "INNER", *args)
+
     def LeftJoin(self, table, *args):
         """
         Construct LEFT OUTER JOIN. Return SqlBuilder.
@@ -659,6 +689,7 @@ class SqlBuilder(object):
         Rest of parameters are join conditions. They are ANDed together.
         """
         return self.Join(table, "LEFT OUTER", *args)
+
     def RightJoin(self, table, *args):
         """
         Construct RIGHT OUTER JOIN. Return SqlBuilder.
@@ -667,6 +698,7 @@ class SqlBuilder(object):
         Rest of parameters are join conditions. They are ANDed together.
         """
         return self.Join(table, "RIGHT OUTER", *args)
+
     def OuterJoin(self, table, *args):
         """
         Construct OUTER JOIN. Return SqlBuilder.
@@ -718,9 +750,8 @@ class SqlBuilder(object):
             assert self.set_fields, "No field setting rules issued, use Set()"
             res = "UPDATE %s SET %s" % (
                 self.update_table,
-                ", ".join(["%s = %s " %
-                    (str(field), expr.sql(**opts))
-                                    for (field, expr) in self.set_fields ]),
+                ", ".join(["%s = %s " % (str(field), expr.sql(**opts))
+                           for (field, expr) in self.set_fields]),
                 )
         elif self.query_type == SELECT:
                 res = "SELECT "
@@ -753,17 +784,17 @@ class SqlBuilder(object):
                     res += "ON %s" % j['conds'].sql(**opts)
 
         if self.where_conds:
-            res +=" WHERE %s" % self.where_conds.sql(**opts)
+            res += " WHERE %s" % self.where_conds.sql(**opts)
 
         if self.query_type == SELECT:
             if self.group_fields:
                 res += " GROUP_BY %s" % (", ".join(
                     [str(field) for field in self.group_fields]))
             if self.having_conds:
-                res +=" HAVING %s" % self.having_conds.sql(**opts)
+                res += " HAVING %s" % self.having_conds.sql(**opts)
 
         if self.limit:
-            res +=" LIMIT %s" % self.limit
+            res += " LIMIT %s" % self.limit
         return res
 
     def FetchFrom(self, db):
@@ -844,13 +875,18 @@ class RowWrapper(object):
     # this here to provide user with methods available in original value tuple
     def __repr__(self):
         return repr(self.values)
+
     def __str__(self):
         return str(self.values)
+
     def __unicode__(self):
         return unicode(self.values)
+
     def __iter__(self):
         return iter(self.values)
+
     def __getitem__(self, key):
         return self.values[key]
+
     def __len__(self):
         return len(self.values)
