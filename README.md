@@ -1,23 +1,21 @@
-This is a technical test task, implemented for EPAM/US company on spring 2011.
-
-Task Description
-----------------
+Yet Another SQL Builder
+-----------------------
 
 Design and implement a module for working with some SQL datadase: building queries, fetching data, updating records, etc.
 
 Usage should be the following:
 
-    :::python
-    import sql
-    def GetUsersMapping(since):
-        db = sql.Db(some_connection_parameters)
-        query = sql.SqlBuilder()
-        query.Select(db.Users.id, db.Users.login
-            ).From(db.Users
-            ).Where(db.Users.last_login_time < since
-            ).And(db.Users.login != 'admin')
-        rows = query.FetchFrom(db)
-        return dict((row.id, row.login) for row in rows)
+```python
+def GetUsersMapping(since):
+    db = sql.Db(some_connection_parameters)
+    query = sql.SqlBuilder()
+    query.Select(db.Users.id, db.Users.login
+        ).From(db.Users
+        ).Where(db.Users.last_login_time < since
+        ).And(db.Users.login != 'admin')
+    rows = query.FetchFrom(db)
+    return dict((row.id, row.login) for row in rows)
+```
 
 `sql.SqlBuilder` class should support:
 
